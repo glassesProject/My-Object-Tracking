@@ -98,7 +98,8 @@ async def find_gaze_near_frame(queue, timestamp, timeout):
 
 def tracking(frame):
     results = model(frame)
-    #print(type(results))
+    
+    id1name = model.names
 
     detections = []
     class_name = []
@@ -106,15 +107,16 @@ def tracking(frame):
     for r in results:
         for box in r.boxes:
             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-            conf = float(box.conf[0].cpu())
+            #conf = float(box.conf[0].cpu())
             cls = int(box.cls[0].cpu())
-            class_name.append(model.names[cls])
-            detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls))
+            class_name.append(id1name[cls])
+            detections.append(([x1, y1, x2 - x1, y2 - y1], cls))
 
 
     track_id_to_label = {}
     tracks = tracker.update_tracks(detections, frame=frame)
 
+    
 
     for i,track in enumerate(tracks):
         if not track.is_confirmed():
@@ -136,7 +138,7 @@ def tracking(frame):
             dist = dist_x * dist_x + dist_y * dist_y
             if dist < min_dist:
                 min_dist = dist
-                matched_class = model.names[det[2]] if det[2] < len(model.names) else "unknown"
+                matched_class = id1name[det[1]] if det[1] < len(id1name) else "unknown"
             #print("print",matched_class)
 
 
