@@ -2,6 +2,9 @@ import asyncio
 import sys
 import os
 
+from ultralytics import YOLO
+from deep_sort_realtime.deepsort_tracker import DeepSort
+
 # Add the parent directory of 'synchronous' to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -11,6 +14,17 @@ from ganzin.sol_sdk.asynchronous.async_client import (
 )
 from ganzin.sol_sdk.common_models import Camera
 import cv2
+
+#YOLOの読み込み
+model = YOLO("yolov8n.pt").to('cuda')
+
+# DeepSORT初期化
+tracker = DeepSort(max_age=30)
+
+print(tracker)
+
+detections = []
+class_name = []
 
 async def main():
     address, port = get_ip_and_port()
@@ -59,19 +73,51 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         frame_buffer = frame.get_buffer()
 
         center = (int(gaze.combined.gaze_2d.x), int(gaze.combined.gaze_2d.y))
-        
-        #print("adress = ",get_ip_and_port())
-        flag = False
+        print("position = " , center)
+        print("adress = ",get_ip_and_port())
         radius = 30
         bgr_color = (255, 255, 0)
         thickness = 5
+        #cv2.circle(frame_buffer, center, radius, bgr_color, thickness)
+        #ここにオブとら
 
-        if center[0] > 350 and center[1] > 250 and center[0] < 550 and center[1] < 450:
-            flag = True
-            bgr_color = (0 , 255 , 255)
+        #frame_buffer をYOLOに読み込ませる
+        results = model(frame_buffer)
 
-        print("position = " , center , " flag = " , flag)
-        cv2.circle(frame_buffer, center, radius, bgr_color, thickness)
+        for r in results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = float(box.conf[0].cpu())
+                cls = int(box.cls[0].cpu())
+                bbox = [x1, y1, x2 - x1, y2 - y1]
+                detections.append((bbox, conf, cls))
+
+        track_id_to_label = {}
+
+
+
+        tracks = tracker.update_tracks(detections, frame=frame)
+        
+
+            # for i,track in enumerate(tracks):
+            # if not track.is_confirmed():
+            #     continue
+            # track_id = track.track_id
+            # ltrb = track.to_ltrb()
+            # x1, y1, x2, y2 = map(int, ltrb)
+            # #if 
+            # min_dist = float('inf')
+            # matched_class = "unknown"
+            # for det in detections:
+                
+            #     dx, dy, dw, dh = det[0]
+            #     det_center = (dx + dw / 2, dy + dh / 2)
+            #     track_center = ((x1 + x2) / 2, (y1 + y2) / 2)
+            #     dist = ((det_center[0] - track_center[0]) ** 2 + (det_center[1] - track_center[1]) ** 2) ** 0.5
+            #     if dist < min_dist:
+            #         min_dist = dist
+            #         matched_class = model.names[det[2]] if det[2] < len(model.names) else "unknown"
+
 
         cv2.imshow('Press "q" to exit', frame_buffer)
         if cv2.waitKey(1) & 0xFF == ord('q'):
