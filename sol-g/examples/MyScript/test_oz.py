@@ -79,9 +79,9 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         
         #new_frame_buffer = frame_buffer
         
-        new_frame_buffer,x = tracking(frame_buffer , center)
-
-
+        new_frame_buffer,newCenter = tracking(frame_buffer , center)
+        cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (255, 255, 0), 2)
+       # print(center)
 
         radius = 30
         bgr_color = (255, 255, 0)
@@ -140,7 +140,7 @@ def tracking(frame , gazePoint):
         prev_detections = detections
         prev_tracks = tracker.update_tracks(detections, frame=frame)
     else:
-        # 推論スキップ中は前回のトラッカー結果のみ使用
+         #推論スキップ中は前回のトラッカー結果のみ使用
         detections = prev_detections
     id1name = model.names
     track_id_to_label = {}
@@ -164,13 +164,13 @@ def tracking(frame , gazePoint):
             if dist < min_dist:
                 min_dist = dist
                 matched_class = id1name[det[1]] if det[1] < len(id1name) else "unknown"
-                oneConf = det[2]
+                
         
 
-        if matched_class != "person" and oneConf > 0.7:
+        if matched_class != "person":
             track_id_to_label[track_id] = matched_class
             #cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            #cv2.putText(frame, f"ID: {track_id} ,{track_id_to_label[track_id]},Conf: {oneConf}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            #cv2.putText(frame, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
     if len(detections) > 5:
             for _ in range(len(detections)-5):
                 del detections[random.randint(0, (len(detections)-1))]
@@ -180,22 +180,23 @@ def tracking(frame , gazePoint):
 #######---------########
 
 
-
+    confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
 
     if randID is None:
-        if detections:
-            rand_track = random.choice(detections)
-            randID = rand_track[1]
+        if confirmed_tracks:
+            randTrack = random.choice(confirmed_tracks)
+            #print(rand_track)
+            randID = randTrack.track_id
             print(f"選ばれたID:{randID}")
 
-    idList = []
-    for track in detections:
-        idList.append(track[1])
+    idList = [track.track_id for track in confirmed_tracks]
 
     if randID in idList:
-        for track_2 in detections:
-            if track_2[1] == randID:
-                coordinaite = track_2[0]
+        for track_2 in confirmed_tracks:
+            if track_2.track_id == randID:
+                print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
+                x1, x2, y1, y2 = map(int , track_2.to_ltrb())
+                coordinaite = [x1, x2, y1, y2]
     else:
         randID = None
         coordinaite = [0,0,0,0]
