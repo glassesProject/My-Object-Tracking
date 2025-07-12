@@ -6,6 +6,8 @@ import sys
 import os
 import cv2
 import random
+import math
+import time
 
 model = YOLO("yolov8n.pt").to('cuda')
 
@@ -24,6 +26,27 @@ from ganzin.sol_sdk.asynchronous.async_client import (
 )
 from ganzin.sol_sdk.common_models import Camera
 
+
+# 事前に定義（グローバル）
+frame_skip = 5  # Nフレームに1回だけYOLO + DeepSORT実行
+frame_count = 0
+prev_detections = []
+prev_tracks = []
+
+distance = 3
+randID = None
+distance_score = None
+
+b = 0
+g = 0
+r = 0
+
+count = 0
+
+_i_ = 0
+shotFlag = False
+time_flag = False
+box_flag = False
 
 async def main():
     address, port = get_ip_and_port()
@@ -68,6 +91,7 @@ async def collect_gaze(ac: AsyncClient, queue: asyncio.Queue, error_event: async
         error_event.set()
 
 async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout):
+    global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag
     while not error_event.is_set():
         frame = await get_video_frame(frame_queue, timeout)
         gaze = await find_gaze_near_frame(gazes, frame.get_timestamp(), timeout)
@@ -78,9 +102,67 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         
         
         #new_frame_buffer = frame_buffer
+        if shotFlag is False:
+            new_frame_buffer,newCenter,score = tracking(frame_buffer , center)
+        else:
+            new_frame_buffer = frame_buffer
+
+    ###
+
+        if score < 2.5 :
+            b = 0
+            g = 0
+            r = 255
+            if time_flag is False:
+                start_time = time.time()
+                print("startTime = ",start_time)
+                time_flag = True
+            
+
+            if time_flag is True:
+                end_time = time.time()
+                #print("endTime = ",end_time)
+                elapsed_time = start_time - end_time
+                print("elapsedTime = ",elapsed_time)
+
+            if shotFlag is False and elapsed_time < -3:
+                save_dir = f"Directory_No{count}"
+                if _i_ < 3:
+                    os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
+
+                    # 保存するファイルパス
+                    file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
+
+                    # 画像として保存
+                    cv2.imwrite(file_path, new_frame_buffer)
+                    _i_ += 1
+                    shotFlag = True
+                    print("shoted")
+                    box_flag = True
+                else:
+                    count += 1
+                    _i_ = 0
+
         
-        new_frame_buffer,newCenter = tracking(frame_buffer , center)
-        cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (255, 255, 0), 2)
+
+        elif score < 4.5 :
+            b = 255
+            start_time = 0
+            r = 255
+            g = 0
+
+            time_flag = False
+        else :
+            start_time = 0
+            g = 255
+            r = 255
+            b = 0
+
+            time_flag = False
+
+        if box_flag is False:
+            cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (b, g, r), 2)
+        #cv2.putText(new_frame_buffer, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
        # print(center)
 
         radius = 30
@@ -89,8 +171,12 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         cv2.circle(new_frame_buffer, center, radius, bgr_color, thickness)
 
         cv2.imshow('Press "q" to exit', new_frame_buffer)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
             return
+        elif key == ord('a'):
+            shotFlag = False
+            box_flag = False
 
 async def get_video_frame(queue, timeout):
     return await asyncio.wait_for(queue.get(), timeout=timeout)
@@ -110,16 +196,9 @@ async def find_gaze_near_frame(queue, timestamp, timeout):
             item = next_item
 
 
-# 事前に定義（グローバル）
-frame_skip = 5  # Nフレームに1回だけYOLO + DeepSORT実行
-frame_count = 0
-prev_detections = []
-prev_tracks = []
 
-distance = 3
-randID = None
 def tracking(frame , gazePoint):
-    global frame_count, prev_detections, prev_tracks, randID
+    global frame_count, prev_detections, prev_tracks, randID , distance_score
 
     frame_count += 1
     run_detection = (frame_count % frame_skip == 0)
@@ -187,21 +266,41 @@ def tracking(frame , gazePoint):
             randTrack = random.choice(confirmed_tracks)
             #print(rand_track)
             randID = randTrack.track_id
-            print(f"選ばれたID:{randID}")
+
+            distance_score = 0
+
+            #print(f"選ばれたID:{randID}")
 
     idList = [track.track_id for track in confirmed_tracks]
 
     if randID in idList:
         for track_2 in confirmed_tracks:
             if track_2.track_id == randID:
-                print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
+                #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
                 x1, x2, y1, y2 = map(int , track_2.to_ltrb())
                 coordinaite = [x1, x2, y1, y2]
     else:
         randID = None
         coordinaite = [0,0,0,0]
 
-    return frame , coordinaite
+#####-----#####-----
+
+    distance_score = 0
+
+    if randID is not None:
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
+
+        # ユークリッド距離を計算
+        distance = math.sqrt((gazePoint[0] - center_x) ** 2 + (gazePoint[1] - center_y) ** 2)
+
+        # 任意の正規化やスケーリング（例えば1000で割るなど）
+        distance_score = distance / 100.0
+
+        #print(f"distance_score = {distance_score:.2f}")
+
+        print(distance_score)
+    return frame , coordinaite , distance_score
 
 
 if __name__ == "__main__":
