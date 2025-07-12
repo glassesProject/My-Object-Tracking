@@ -103,7 +103,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         
         #new_frame_buffer = frame_buffer
         if shotFlag is False:
-            new_frame_buffer,newCenter,score = tracking(frame_buffer , center)
+            new_frame_buffer,newCenter,score,className = tracking(frame_buffer , center)
         else:
             new_frame_buffer = frame_buffer
 
@@ -134,7 +134,20 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
 
                     # 画像として保存
-                    cv2.imwrite(file_path, new_frame_buffer)
+                    cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
+
+                    if className == "tv":
+                        base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
+                        overlay_img = cv2.imread("tv_image.png")
+
+                        # 合成先座標（例：左上に貼り付ける場合）
+
+                        # 合成範囲を取得
+                        h, w = overlay_img.shape[:2]
+                        base_img[newCenter[2]:newCenter[2]+h, newCenter[0]:newCenter[0]+w] = overlay_img
+
+                        cv2.imrite(file_path, base_img)
+
                     _i_ += 1
                     shotFlag = True
                     print("shoted")
@@ -206,7 +219,7 @@ def tracking(frame , gazePoint):
     if run_detection:
         results = model(frame, imgsz=320)  # imgszでさらに高速化
 
-        id1name = model.names
+        
         detections = []
 
         for r in results:
@@ -279,6 +292,8 @@ def tracking(frame , gazePoint):
                 #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
                 x1, x2, y1, y2 = map(int , track_2.to_ltrb())
                 coordinaite = [x1, x2, y1, y2]
+                class_name = track_id_to_label.get(track.track_id, "unknown")
+                
     else:
         randID = None
         coordinaite = [0,0,0,0]
@@ -300,7 +315,7 @@ def tracking(frame , gazePoint):
         #print(f"distance_score = {distance_score:.2f}")
 
         print(distance_score)
-    return frame , coordinaite , distance_score
+    return frame , coordinaite , distance_score , class_name
 
 
 if __name__ == "__main__":
