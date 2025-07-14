@@ -8,6 +8,7 @@ import cv2
 import random
 import math
 import time
+import numpy as np
 
 model = YOLO("yolov8n.pt").to('cuda')
 
@@ -136,17 +137,28 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
 
-                    if className == "tv":
-                        base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
-                        overlay_img = cv2.imread("tv_image.png")
+                    #if className == "tv":
+                    base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
+                    overlay_img = cv2.imread("image/PCchan.png",cv2.IMREAD_UNCHANGED)
 
-                        # 合成先座標（例：左上に貼り付ける場合）
+                    # 合成先座標（例：左上に貼り付ける場合）
+                    x, y = newCenter[1], newCenter[3]
+                    # 合成範囲を取得
+                    h, w = overlay_img.shape[:2]
+                    roi = base_img[y:y+h, x:x+w].copy()
 
-                        # 合成範囲を取得
-                        h, w = overlay_img.shape[:2]
-                        base_img[newCenter[2]:newCenter[2]+h, newCenter[0]:newCenter[0]+w] = overlay_img
+                    alpha = overlay_img[:, :, 3] / 255.0
+                    alpha = alpha[:, :, np.newaxis]
 
-                        cv2.imrite(file_path, base_img)
+                    overlay_rgb = overlay_img[:, :, :3]
+
+                    # アルファブレンド計算
+                    blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
+
+                    # 合成結果を元の画像に貼り戻す
+                    base_img[y:y+h, x:x+w] = blended
+
+                    cv2.imwrite(file_path, base_img)
 
                     _i_ += 1
                     shotFlag = True
@@ -285,6 +297,7 @@ def tracking(frame , gazePoint):
             #print(f"選ばれたID:{randID}")
 
     idList = [track.track_id for track in confirmed_tracks]
+    class_name = None
 
     if randID in idList:
         for track_2 in confirmed_tracks:
@@ -314,7 +327,7 @@ def tracking(frame , gazePoint):
 
         #print(f"distance_score = {distance_score:.2f}")
 
-        print(distance_score)
+        print(class_name)
     return frame , coordinaite , distance_score , class_name
 
 
