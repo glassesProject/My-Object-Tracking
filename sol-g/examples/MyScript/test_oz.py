@@ -303,8 +303,8 @@ def tracking(frame , gazePoint):
         for track_2 in confirmed_tracks:
             if track_2.track_id == randID:
                 #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
-                x1, x2, y1, y2 = map(int , track_2.to_ltrb())
-                coordinaite = [x1, x2, y1, y2]
+                x1, y1, x2, y2 = map(int , track_2.to_ltrb())
+                coordinaite = [x1, y1, x2, y2]
                 class_name = track_id_to_label.get(track.track_id, "unknown")
                 
     else:
