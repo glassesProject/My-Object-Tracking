@@ -137,6 +137,11 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
 
+
+
+###################################################
+
+
                     #if className == "tv":
                     base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
                     overlay_img = cv2.imread("image/PCchan.png",cv2.IMREAD_UNCHANGED)
@@ -159,6 +164,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     base_img[y:y+h, x:x+w] = blended
 
                     cv2.imwrite(file_path, base_img)
+
+###########################################################
 
                     _i_ += 1
                     shotFlag = True
