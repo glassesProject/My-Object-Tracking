@@ -27,6 +27,7 @@ async def main():
 
         try:
             await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
+            
         finally:
             collect_video_task.cancel()
             collect_gaze_task.cancel()
@@ -59,6 +60,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         center = (int(gaze.combined.gaze_2d.x), int(gaze.combined.gaze_2d.y))
         print("position = " , center)
         print("adress = ",get_ip_and_port())
+        print("printed",draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds))
+
         radius = 30
         bgr_color = (255, 255, 0)
         thickness = 5
