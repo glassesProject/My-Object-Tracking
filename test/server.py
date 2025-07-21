@@ -9,6 +9,11 @@ import random
 import math
 import time
 import numpy as np
+import websockets
+import json
+
+# 接続中のクライアント（Androidアプリ）を管理するセット
+connected_clients = set()
 
 model = YOLO("yolov8n.pt").to('cuda')
 
@@ -21,7 +26,7 @@ tracker = DeepSort(max_age=30)
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.server_info import get_ip_and_port
+from server_info import get_ip_and_port
 from ganzin.sol_sdk.asynchronous.async_client import (
     AsyncClient, recv_video, recv_gaze
 )
@@ -93,6 +98,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         frame_buffer = frame.get_buffer()
 
         center = (int(gaze.combined.gaze_2d.x), int(gaze.combined.gaze_2d.y))
+
+
 
         
         
@@ -188,6 +195,15 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         bgr_color = (255, 255, 0)
         thickness = 5
         cv2.circle(new_frame_buffer, center, radius, bgr_color, thickness)
+        
+        status = {
+        "randID": randID,
+        "distanceScore": f"{distance_score:.2f}", # 小数点以下2桁の文字列に
+        "className": class_name if class_name else "N/A",
+        "shotFlag": shotFlag    
+        }
+        # 状態をブロードキャスト
+        await broadcast_status(status)
 
         cv2.imshow('Press "q" to exit', new_frame_buffer)
         key = cv2.waitKey(1) & 0xFF
@@ -196,7 +212,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         elif key == ord('a'):
             shotFlag = False
             box_flag = False
-
+        
+        
 async def get_video_frame(queue, timeout):
     return await asyncio.wait_for(queue.get(), timeout=timeout)
 
@@ -214,7 +231,23 @@ async def find_gaze_near_frame(queue, timestamp, timeout):
                 return next_item
             item = next_item
 
+# 状態を全クライアントにブロードキャストする非同期関数
+async def broadcast_status(status_data):
+    if connected_clients:
+        message = json.dumps(status_data)
+        # asyncio.waitを使って全クライアントに並行して送信
+        await asyncio.wait([client.send(message) for client in connected_clients])
 
+# クライアントが接続したときの処理
+async def handler(websocket, path):
+    # 新しいクライアントをセットに追加
+    connected_clients.add(websocket)
+    try:
+        # 接続が切れるまで待機
+        await websocket.wait_closed()
+    finally:
+        # クライアントが切断されたらセットから削除
+        connected_clients.remove(websocket)
 
 def tracking(frame , gazePoint):
     global frame_count, prev_detections, prev_tracks, randID , distance_score
@@ -323,6 +356,19 @@ def tracking(frame , gazePoint):
         print(class_name)
     return frame , coordinaite , distance_score , class_name
 
+# if __name__ == "__main__": の部分を修正
+async def main_with_server():
+    # WebSocketサーバーを起動
+    # "0.0.0.0"は、どのネットワークからでもアクセス可能にすることを意味する
+    # ポート番号は8765を使用（変更可能）
+    start_server = websockets.serve(handler, "0.0.0.0", 8765)
+    
+    # 既存のメイン処理とWebSocketサーバーを同時に実行
+    await asyncio.gather(
+        start_server,
+        main() # 元々のmain関数
+    )
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # 修正した関数を実行
+    asyncio.run(main_with_server())
