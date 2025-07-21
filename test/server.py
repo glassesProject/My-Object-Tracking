@@ -34,15 +34,9 @@ frame_count = 0
 prev_detections = []
 prev_tracks = []
 
-distance = 3
-randID = None
-distance_score = None
+b,g,r,count,distance = (0,0,0,0,3)
+randID,distance_score = (None ,None)
 
-b = 0
-g = 0
-r = 0
-
-count = 0
 
 _i_ = 0
 shotFlag = False
@@ -310,7 +304,6 @@ def tracking(frame , gazePoint):
     else:
         randID = None
         coordinaite = [0,0,0,0]
-
 #####-----#####-----
 
     distance_score = 0
