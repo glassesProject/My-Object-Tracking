@@ -74,11 +74,11 @@ async def main():
        # return collect_video_task
 
         try:
-            #flaskからのフラグがFlaseだったら動かないようにする       
-            with open(STATUS_FILE_PATH, 'r') as f:
-                config = json.load(f)
-            if not config.get("iscreating"):
-                await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
+            # #flaskからのフラグがFlaseだったら動かないようにする       
+            # with open(STATUS_FILE_PATH, 'r') as f:
+            #     config = json.load(f)
+            # if not config.get("iscreating"):
+            await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
         finally:
             collect_video_task.cancel()
             collect_gaze_task.cancel()
