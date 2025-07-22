@@ -11,6 +11,7 @@ import time
 import numpy as np
 #flask用に以下のパッケージを追加
 from PIL import Image, ImageDraw
+import aiofiles
 import json
 import random
 #Flaskとデータを受け渡すjsonfileのパス
@@ -74,11 +75,20 @@ async def main():
        # return collect_video_task
 
         try:
-            # #flaskからのフラグがFlaseだったら動かないようにする       
-            # with open(STATUS_FILE_PATH, 'r') as f:
-            #     config = json.load(f)
-            # if not config.get("iscreating"):
-            await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
+            print(">> Waiting for iscreating flag to become False...")
+
+            while True:
+                async with aiofiles.open(STATUS_FILE_PATH, 'r') as f:
+                    content = await f.read()
+                    config = json.loads(content)
+
+                if not config.get("iscreating"):
+                    print(">> iscreating is False, starting draw_gaze_on_frame")
+                    await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
+                    break
+
+                await asyncio.sleep(1)  # 1秒おきにチェック
+
         finally:
             collect_video_task.cancel()
             collect_gaze_task.cancel()
