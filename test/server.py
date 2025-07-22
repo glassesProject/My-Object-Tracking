@@ -152,18 +152,19 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 if _i_ < 3:
                     os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
 
-                    # 保存するファイルパス
+                    # # 保存するファイルパス
                     file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
 
                     # 画像として保存
-                    cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
-                    
-                    #生成した画像を変更時間を更新しながらjsonに保存
-                    current_time = time.strftime("%H:%M:%S")
-                    Image.fromarray(new_frame_buffer).save('FlaskApp-main/static/images/generated_image.jpg')
+                    raw_dir = os.path.join(os.path.dirname(__file__), "rawData")
+                    os.makedirs(raw_dir, exist_ok=True)
+
+                    save_path = os.path.join(raw_dir, f"No{count}_{_i_}.png")
+                    cv2.imwrite(save_path, new_frame_buffer)
                     
                     #if className == "tv":
-                    base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
+                    raw_path = os.path.join(os.path.dirname(__file__), "rawData", f"No{count}_{_i_}.png")
+                    base_img = cv2.imread(raw_path)
                     overlay_img = cv2.imread("image/PCchan.png",cv2.IMREAD_UNCHANGED)
 
                     # 合成先座標（例：左上に貼り付ける場合）
@@ -182,6 +183,10 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                     # 合成結果を元の画像に貼り戻す
                     base_img[y:y+h, x:x+w] = blended
+                    
+                    #生成した画像を変更時間を更新しながらjsonに保存
+                    current_time = time.strftime("%H:%M:%S")
+                    Image.fromarray(base_img).save('FlaskApp-main/static/images/generated_image.jpg')
 
                     cv2.imwrite(file_path, base_img)
 
