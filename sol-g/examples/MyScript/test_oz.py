@@ -153,14 +153,18 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
                     overlay_img = cv2.imread("image/PCchan.png", cv2.IMREAD_UNCHANGED)
 
-                    x, y = newCenter[1], newCenter[3]
+                    x, y = (newCenter[0]+newCenter[2])//2, (newCenter[1]+newCenter[3])//2
                     h, w = overlay_img.shape[:2]
+                    lux = x - w//2
+                    luy = y - h//2
+                    rbx = lux + w 
+                    rby = luy + h 
 
                     # 範囲チェック
-                    if y + h > base_img.shape[0] or x + w > base_img.shape[1]:
+                    if luy + h > base_img.shape[0] or lux + w > base_img.shape[1] or luy<0 or lux <0:
                         print("範囲外です")
                     else:
-                        roi = base_img[y:y+h, x:x+w].copy()
+                        roi = base_img[luy:rby, lux:rbx].copy()
 
                         overlay_rgb = overlay_img[:, :, :3]
                         alpha = overlay_img[:, :, 3] / 255.0
@@ -172,7 +176,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                         blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
 
-                        base_img[y:y+h, x:x+w] = blended
+                        base_img[luy:rby, lux:rbx] = blended
                         cv2.imwrite(file_path, base_img)
 
 
