@@ -6,7 +6,7 @@ import time
 from PIL import Image, ImageDraw
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-WAIT_FLAG_PATH = os.path.join(BASE_DIR, 'state', 'wait_flag.txt')
+# WAIT_FLAG_PATH = os.path.join(BASE_DIR, 'state', 'wait_flag.txt')
 STATUS_FILE_PATH = os.path.join(BASE_DIR, 'state', 'external_status.json')
 
 def update_loop():

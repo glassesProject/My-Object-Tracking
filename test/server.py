@@ -9,8 +9,15 @@ import random
 import math
 import time
 import numpy as np
+#flask用に以下のパッケージを追加
+from PIL import Image, ImageDraw
+import json
+import random
+#Flaskとデータを受け渡すjsonfileのパス
+STATUS_FILE_PATH = r'FlaskApp-main\state\external_status.json'
 
-model = YOLO("yolov8n.pt").to('cuda')
+# model = YOLO("yolov8n.pt").to('cuda')
+model = YOLO("yolov8n.pt")
 
 tracker = DeepSort(max_age=30)
     #embedder="mobilenet",
@@ -51,11 +58,11 @@ box_flag = False
 
 async def main():
     address, port = get_ip_and_port()
-    timeout_seconds = 5.0
-
+    timeout_seconds = 10.0
     
 
     async with AsyncClient(address, port) as ac:
+
         error_event = asyncio.Event()
 
         frames = asyncio.Queue(1)
@@ -67,7 +74,11 @@ async def main():
        # return collect_video_task
 
         try:
-            await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
+            #flaskからのフラグがFlaseだったら動かないようにする       
+            with open(STATUS_FILE_PATH, 'r') as f:
+                config = json.load(f)
+            if not config.get("iscreating"):
+                await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
         finally:
             collect_video_task.cancel()
             collect_gaze_task.cancel()
@@ -136,7 +147,11 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
-
+                    
+                    #生成した画像を変更時間を更新しながらjsonに保存
+                    current_time = time.strftime("%H:%M:%S")
+                    Image.fromarray(new_frame_buffer).save('FlaskApp-main/static/images/generated_image.jpg')
+                    
                     #if className == "tv":
                     base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
                     overlay_img = cv2.imread("image/PCchan.png",cv2.IMREAD_UNCHANGED)
@@ -332,4 +347,5 @@ def tracking(frame , gazePoint):
 
 
 if __name__ == "__main__":
+    
     asyncio.run(main())
