@@ -130,7 +130,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             new_frame_buffer = frame_buffer
 
     ###
-
+        #注視の時間で分岐
         if score < 2.5 :
             b = 0
             g = 0
@@ -167,22 +167,32 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     base_img = cv2.imread(raw_path)
                     overlay_img = cv2.imread("image/PCchan.png",cv2.IMREAD_UNCHANGED)
 
-                    # 合成先座標（例：左上に貼り付ける場合）
+                   # 合成座標（貼り付け開始位置）
                     x, y = newCenter[1], newCenter[3]
-                    # 合成範囲を取得
+
+                    # オーバーレイ画像のサイズ
                     h, w = overlay_img.shape[:2]
+
+                    # base_imgのサイズ取得
+                    base_h, base_w = base_img.shape[:2]
+
+                    # 合成範囲をbase_imgに収まるように調整
+                    h = min(h, base_h - y)
+                    w = min(w, base_w - x)
+
+                    # 切り出しROIもサイズ調整後に
                     roi = base_img[y:y+h, x:x+w].copy()
+                    overlay_crop = overlay_img[0:h, 0:w]
 
-                    alpha = overlay_img[:, :, 3] / 255.0
+                    # アルファブレンド用
+                    alpha = overlay_crop[:, :, 3] / 255.0
                     alpha = alpha[:, :, np.newaxis]
+                    overlay_rgb = overlay_crop[:, :, :3]
 
-                    overlay_rgb = overlay_img[:, :, :3]
-
-                    # アルファブレンド計算
+                    # 合成
                     blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
-
-                    # 合成結果を元の画像に貼り戻す
                     base_img[y:y+h, x:x+w] = blended
+
                     
                     #生成した画像を変更時間を更新しながらjsonに保存
                     current_time = time.strftime("%H:%M:%S")
@@ -225,6 +235,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         thickness = 5
         cv2.circle(new_frame_buffer, center, radius, bgr_color, thickness)
 
+        #ｑ押したら終了
         cv2.imshow('Press "q" to exit', new_frame_buffer)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
@@ -236,6 +247,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 async def get_video_frame(queue, timeout):
     return await asyncio.wait_for(queue.get(), timeout=timeout)
 
+#
 async def find_gaze_near_frame(queue, timestamp, timeout):
     item = await asyncio.wait_for(queue.get(), timeout=timeout)
     if item.get_timestamp() > timestamp:
