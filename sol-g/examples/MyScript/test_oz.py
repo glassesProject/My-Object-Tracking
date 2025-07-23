@@ -43,6 +43,8 @@ g = 0
 r = 0
 
 count = 0
+#音声のモードフラグ１－４
+current_mode = 1
 
 _i_ = 0
 shotFlag = False
@@ -92,7 +94,7 @@ async def collect_gaze(ac: AsyncClient, queue: asyncio.Queue, error_event: async
         error_event.set()
 
 async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout):
-    global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag
+    global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag,current_mode
 
     
     
@@ -118,6 +120,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
     ###
 
         if score < 2.5 :
+            #４は連続音
+            current_mode = 4
             b = 0
             g = 0
             r = 255
@@ -191,15 +195,20 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     _i_ = 0
 
         
-
+            #オブジェクトと視線が少し近い
         elif score < 4.5 :
+            #3番は短い間隔の音
+            current_mode = 3
             b = 255
             start_time = 0
             r = 255
             g = 0
 
             time_flag = False
+            #オブジェクトと視線が離れている
         else :
+            #3番は短い間隔の音
+            current_mode = 1
             start_time = 0
             g = 255
             r = 255
@@ -352,9 +361,8 @@ def tracking(frame , gazePoint):
         print(class_name)
     return frame , coordinaite , distance_score , class_name
 
-
 async def undistort(cap):
-    data = np.load("camera_params.npz")
+    data = np.load(os.path.join(BASE_DIR, "camera_params.npz"))
     mtx = data["mtx"]
     dist = data["dist"]
 
@@ -364,5 +372,72 @@ async def undistort(cap):
     undistorted = cv2.undistort(cap, mtx, dist, None, mtx)
     return undistorted
 
+import pygame
+import time
+import threading
+import os
+
+# パス設定（どこから実行してもOK）
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sound_path = os.path.join(BASE_DIR, "beep.wav")
+
+# グローバル制御変数
+running = True
+
+loop_channel = None  # mode=4で使うループ用チャンネル
+
+# 初期化
+pygame.mixer.init()
+beep = pygame.mixer.Sound(sound_path)
+
+def beep_loop():
+    
+    global loop_channel,current_mode
+    print("音声ループ開始" , current_mode)
+    
+
+    while running:
+        print("音声ループ中" , current_mode)
+        if current_mode == 1:
+            # 無音モード（停止）
+            if loop_channel:
+                loop_channel.stop()
+                loop_channel = None
+            time.sleep(0.1)
+            continue
+
+        elif current_mode == 2:
+            interval = 0.5
+        elif current_mode == 3:
+            interval = 0.25
+        elif current_mode == 4:
+            # 鳴り続ける（ループ再生）
+            if not loop_channel or not loop_channel.get_busy():
+                loop_channel = beep.play(loops=-1)
+            time.sleep(0.1)
+            continue
+        else:
+            interval = 1.0
+
+        # ここから再生処理（モード2 or 3）
+        if loop_channel:
+            loop_channel.stop()
+            loop_channel = None
+
+        channel = beep.play()
+        print("音声再生")
+        while channel.get_busy():
+            time.sleep(0.01)  # 再生終了まで待つ
+
+        time.sleep(interval)
+
+def start_beep_thread():
+    print("呼び出すための関数を開始")
+    thread = threading.Thread(target=beep_loop)
+    thread.daemon = True
+    thread.start()
+
+
 if __name__ == "__main__":
+    start_beep_thread()
     asyncio.run(main())
