@@ -93,10 +93,17 @@ async def collect_gaze(ac: AsyncClient, queue: asyncio.Queue, error_event: async
 
 async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout):
     global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag
+
+    
+    
     while not error_event.is_set():
         frame = await get_video_frame(frame_queue, timeout)
         gaze = await find_gaze_near_frame(gazes, frame.get_timestamp(), timeout)
-        frame_buffer = frame.get_buffer()
+
+        
+
+        frame_buffer = await undistort(frame.get_buffer())
+        #frame_buffer = frame.get_buffer()
 
         center = (int(gaze.combined.gaze_2d.x), int(gaze.combined.gaze_2d.y))
 
@@ -137,28 +144,43 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
 
+
+
+###################################################
+
+
                     #if className == "tv":
                     base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
-                    overlay_img = cv2.imread("image/PCchan.png",cv2.IMREAD_UNCHANGED)
+                    overlay_img = cv2.imread("image/PCchan.png", cv2.IMREAD_UNCHANGED)
 
-                    # 合成先座標（例：左上に貼り付ける場合）
-                    x, y = newCenter[1], newCenter[3]
-                    # 合成範囲を取得
+                    x, y = (newCenter[0]+newCenter[2])//2, (newCenter[1]+newCenter[3])//2
                     h, w = overlay_img.shape[:2]
-                    roi = base_img[y:y+h, x:x+w].copy()
+                    lux = x - w//2
+                    luy = y - h//2
+                    rbx = lux + w 
+                    rby = luy + h 
 
-                    alpha = overlay_img[:, :, 3] / 255.0
-                    alpha = alpha[:, :, np.newaxis]
+                    # 範囲チェック
+                    if luy + h > base_img.shape[0] or lux + w > base_img.shape[1] or luy<0 or lux <0:
+                        print("範囲外です")
+                    else:
+                        roi = base_img[luy:rby, lux:rbx].copy()
 
-                    overlay_rgb = overlay_img[:, :, :3]
+                        overlay_rgb = overlay_img[:, :, :3]
+                        alpha = overlay_img[:, :, 3] / 255.0
+                        alpha = alpha[:, :, np.newaxis]
 
-                    # アルファブレンド計算
-                    blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
+                        if roi.shape != overlay_rgb.shape:
+                            print("サイズ違い検出: roi.shape =", roi.shape, " overlay_rgb.shape =", overlay_rgb.shape)
+                            roi = cv2.resize(roi, (overlay_rgb.shape[1], overlay_rgb.shape[0]))
 
-                    # 合成結果を元の画像に貼り戻す
-                    base_img[y:y+h, x:x+w] = blended
+                        blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
 
-                    cv2.imwrite(file_path, base_img)
+                        base_img[luy:rby, lux:rbx] = blended
+                        cv2.imwrite(file_path, base_img)
+
+
+###########################################################
 
                     _i_ += 1
                     shotFlag = True
@@ -330,6 +352,17 @@ def tracking(frame , gazePoint):
         print(class_name)
     return frame , coordinaite , distance_score , class_name
 
+
+async def undistort(cap):
+    data = np.load("camera_params.npz")
+    mtx = data["mtx"]
+    dist = data["dist"]
+
+    print(mtx,dist,"aaa")
+
+    # 歪み補正を適用
+    undistorted = cv2.undistort(cap, mtx, dist, None, mtx)
+    return undistorted
 
 if __name__ == "__main__":
     asyncio.run(main())

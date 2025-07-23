@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# 生成されるデータと出力
+rawData/
+Directory_No*/
+
+# 大容量のモデルファイル
+yolov8n.pt
+
+# 環境固有の設定ファイル
+camera_params.npz
