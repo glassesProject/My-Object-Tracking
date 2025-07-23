@@ -12,12 +12,13 @@ import numpy as np
 
 model = YOLO("yolov8n.pt").to('cuda')
 
-tracker = DeepSort(max_age=30)
-    #embedder="mobilenet",
-    #half=True,
-    #bgr=True,
-    #embedder_gpu=True
-    #)
+tracker = DeepSort(
+    max_age=30,
+    embedder="mobilenet",
+    half=True,
+    bgr=True,
+    embedder_gpu=True
+    )
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -142,8 +143,10 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 if _i_ < 3:
                     os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
 
+                    os.makedirs("rawData", exist_ok=True)
+
                     # 保存するファイルパス
-                    file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
+                    file_path = os.path.join(save_dir , f"no{count}_,{_i_}.png")
 
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
