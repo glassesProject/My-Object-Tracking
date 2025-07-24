@@ -10,7 +10,6 @@ import math
 import time
 import numpy as np
 
-from functools import partial
 model = YOLO("yolov8n.pt").to('cuda')
 
 tracker = DeepSort(
@@ -52,8 +51,6 @@ _i_ = 0
 shotFlag = False
 time_flag = False
 box_flag = False
-
-loop = asyncio.get_event_loop()
 
 async def main():
     address, port = get_ip_and_port()
@@ -108,7 +105,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
         
 
-        frame_buffer = await loop.run_in_executor( None,undistort,frame.get_buffer())
+        frame_buffer = await undistort(frame.get_buffer())
         #frame_buffer = frame.get_buffer()
 
         center = (int(gaze.combined.gaze_2d.x), int(gaze.combined.gaze_2d.y))
@@ -117,7 +114,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         
         #new_frame_buffer = frame_buffer
         if shotFlag is False:
-            new_frame_buffer,newCenter,score,className = await loop.run_in_executor(None,lambda: tracking(frame_buffer , center))
+            new_frame_buffer,newCenter,score,className = tracking(frame_buffer , center)
         else:
             new_frame_buffer = frame_buffer
 
@@ -125,7 +122,10 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
         if score < 2.5 :
             #４は連続音
-            current_mode = 4
+            if shotFlag is True:
+                current_mode = 1
+            else:
+                current_mode = 4
             b = 0
             g = 0
             r = 255
@@ -146,7 +146,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 if _i_ < 3:
                     os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
 
-                    os.makedirs("rawData", exist_ok=True)
+                    os.makedirs(save_dir, exist_ok=True)
 
                     # 保存するファイルパス
                     file_path = os.path.join(save_dir , f"no{count}_,{_i_}.png")
@@ -212,7 +212,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
             time_flag = False
             #オブジェクトと視線が離れている
-        else :
+        elif shotFlag is True :
             #3番は短い間隔の音
             current_mode = 1
             start_time = 0
