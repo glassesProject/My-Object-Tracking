@@ -11,6 +11,7 @@ import time
 import numpy as np
 
 model = YOLO("yolov8n.pt").to('cuda')
+#model.export(format = "openvino",int8=True)
 
 tracker = DeepSort(max_age=30)
     #embedder="mobilenet",
