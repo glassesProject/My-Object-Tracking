@@ -11,7 +11,6 @@ import time
 import numpy as np
 
 model = YOLO("yolov8n.pt").to('cuda')
-#model.export(format = "openvino",int8=True)
 
 tracker = DeepSort(max_age=30)
     #embedder="mobilenet",
@@ -264,67 +263,113 @@ def tracking(frame , gazePoint):
     frame_count += 1
     run_detection = (frame_count % frame_skip == 0)
 
-    detections = []
-
     if run_detection:
-        results = model(frame, imgsz=320)
+        results = model(frame, imgsz=320)  # imgszでさらに高速化
 
-        all_detections = []
+        
+        detections = []
+
         for r in results:
             for box in r.boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                 cls = int(box.cls[0].cpu())
                 conf = float(box.conf[0].cpu())
-                all_detections.append(([x1, y1, x2 - x1, y2 - y1], cls, conf))
-
-        # 最初だけランダム抽選
-        if randID is None and all_detections:
-            chosen_det = random.choice(all_detections)
-            detections = [chosen_det]
-        elif randID is not None:
-            detections = prev_detections  # 再検出はしない（DeepSORT追跡に任せる）
+                detections.append(([x1, y1, x2 - x1, y2 - y1], cls, conf))
 
         prev_detections = detections
         prev_tracks = tracker.update_tracks(detections, frame=frame)
-
     else:
+         #推論スキップ中は前回のトラッカー結果のみ使用
         detections = prev_detections
-
     id1name = model.names
-    track_id_to_label = {}
+    #track_id_to_label = {}
+    confirmed_tracks = []
 
-    confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
+    for track in prev_tracks:
+        if not track.is_confirmed():
+            continue
 
-    coordinaite = [0, 0, 0, 0]
-    class_name = None
+        track_id = track.track_id
+        x1, y1, x2, y2 = map(int, track.to_ltrb())
+        track_center = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
+
+        # 最も近いクラスを探す
+        min_dist = float('inf')
+        matched_class = "unknown"
+        i = 0
+        for det in detections :
+            if det[1] < len(id1name) and id1name[det[1]] not in ['person'] and id1name[det[1]] not in ['unknown']:#もしそのオブジェクトのクラスがperso , unknown だったらばいちゃ
+                dx, dy, dw, dh = det[0]
+                dist_x = (dx + dw * 0.5) - track_center[0]
+                dist_y = (dy + dh * 0.5) - track_center[1]
+                dist = dist_x * dist_x + dist_y * dist_y
+                #det.append(i)
+                #i += 1
+                confirmed_tracks.append(det)
+                if dist < min_dist:
+                    min_dist = dist
+                    #matched_class = id1name[det[1]]
+                
+        
+#ここはよくわからない
+     #   if matched_class != "person" and matched_class != "unknown":
+      #      track_id_to_label[track_id] = matched_class
+            #cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            #cv2.putText(frame, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    if len(detections) > 5:
+            for _ in range(len(detections)-5):
+                del detections[random.randint(0, (len(detections)-1))]
+
+
+
+#######---------########
+
+
+    #confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
 
     if randID is None:
         if confirmed_tracks:
             randTrack = random.choice(confirmed_tracks)
-            randID = randTrack.track_id
-            distance_score = 10
-            print(f"選ばれたID:{randID}")
+            #print(rand_track)
+            randID = randTrack[0]
 
-    # randIDのtrackのみ処理
-    if randID is not None:
-        for track in confirmed_tracks:
-            if track.track_id == randID:
-                x1, y1, x2, y2 = map(int, track.to_ltrb())
+            distance_score = 0
+
+            #print(f"選ばれたID:{randID}")
+
+    idList = [track.track_id for track in confirmed_tracks]
+    class_name = None
+
+    if randID in idList:
+        for track_2 in confirmed_tracks:
+            if track_2.track_id == randID:
+                #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
+                x1, y1, x2, y2 = map(int , track_2.to_ltrb())
                 coordinaite = [x1, y1, x2, y2]
-                cls_id = int(track.det_class) if hasattr(track, 'det_class') else 0
-                class_name = id1name[cls_id] if cls_id < len(id1name) else "unknown"
-
-                # ユークリッド距離スコア
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
-                distance = math.sqrt((gazePoint[0] - center_x) ** 2 + (gazePoint[1] - center_y) ** 2)
-                distance_score = distance / 100.0
-                break
+                class_name = track_2[1]
+                
     else:
         randID = None
-        distance_score = 10.0  # 離れてる扱い
+        coordinaite = [0,0,0,0]
 
-    return frame, coordinaite, distance_score, class_name
+#####-----#####-----
+
+    distance_score = 0
+
+    if randID is not None:
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
+
+        # ユークリッド距離を計算
+        distance = math.sqrt((gazePoint[0] - center_x) ** 2 + (gazePoint[1] - center_y) ** 2)
+
+        # 任意の正規化やスケーリング（例えば1000で割るなど）
+        distance_score = distance / 100.0
+
+        #print(f"distance_score = {distance_score:.2f}")
+
+        print(class_name)
+    return frame , coordinaite , distance_score , class_name
 
 async def undistort(cap):
     data = np.load(os.path.join(BASE_DIR, "camera_params.npz"))
