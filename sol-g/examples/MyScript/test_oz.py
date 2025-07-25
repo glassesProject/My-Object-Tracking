@@ -301,7 +301,7 @@ def tracking(frame , gazePoint):
         if confirmed_tracks:
             randTrack = random.choice(confirmed_tracks)
             randID = randTrack.track_id
-            distance_score = 0
+            distance_score = 10
             print(f"選ばれたID:{randID}")
 
     # randIDのtrackのみ処理
@@ -310,7 +310,7 @@ def tracking(frame , gazePoint):
             if track.track_id == randID:
                 x1, y1, x2, y2 = map(int, track.to_ltrb())
                 coordinaite = [x1, y1, x2, y2]
-                cls_id = track.det_class if hasattr(track, 'det_class') else 0
+                cls_id = int(track.det_class) if hasattr(track, 'det_class') else 0
                 class_name = id1name[cls_id] if cls_id < len(id1name) else "unknown"
 
                 # ユークリッド距離スコア
