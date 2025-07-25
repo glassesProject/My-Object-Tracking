@@ -12,13 +12,12 @@ import numpy as np
 
 model = YOLO("yolov8n.pt").to('cuda')
 
-tracker = DeepSort(
-    max_age=30,
-    embedder="mobilenet",
-    half=True,
-    bgr=True,
-    embedder_gpu=True
-    )
+tracker = DeepSort(max_age=30)
+    #embedder="mobilenet",
+    #half=True,
+    #bgr=True,
+    #embedder_gpu=True
+    #)
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -122,11 +121,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
         if score < 2.5 :
             #４は連続音
-            if shotFlag is True:
-                current_mode = 1
-            else:
-                current_mode = 4
-
+            current_mode = 4
             b = 0
             g = 0
             r = 255
@@ -147,10 +142,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 if _i_ < 3:
                     os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
 
-                    os.makedirs(save_dir, exist_ok=True)
-
                     # 保存するファイルパス
-                    file_path = os.path.join(save_dir , f"no{count}_,{_i_}.png")
+                    file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
 
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
@@ -213,7 +206,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
             time_flag = False
             #オブジェクトと視線が離れている
-        elif shotFlag is True :
+        else :
             #3番は短い間隔の音
             current_mode = 1
             start_time = 0
@@ -222,6 +215,10 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             b = 0
 
             time_flag = False
+
+
+        if shotFlag :
+            current_mode = 1
 
         if box_flag is False:
             cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (b, g, r), 2)
@@ -267,93 +264,116 @@ def tracking(frame , gazePoint):
     run_detection = (frame_count % frame_skip == 0)
 
     if run_detection:
-        results = model(frame, imgsz=320)
+        results = model(frame, imgsz=320)  # imgszでさらに高速化
 
-       # print(results)
-
+        
         detections = []
+
         for r in results:
             for box in r.boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                 cls = int(box.cls[0].cpu())
                 conf = float(box.conf[0].cpu())
-                detections.append(([x1, y1, x2 - x1, y2 - y1],  cls,conf))
+                detections.append(([x1, y1, x2 - x1, y2 - y1], cls, conf))
 
         prev_detections = detections
         prev_tracks = tracker.update_tracks(detections, frame=frame)
     else:
+         #推論スキップ中は前回のトラッカー結果のみ使用
         detections = prev_detections
-
     id1name = model.names
     track_id_to_label = {}
 
-    #print(detections)
-    # Trackに対応するクラス名を記録
-    for det in detections:
-        box, cls_id, conf = det
-        
-        #track_center = (box[0] + box[2] / 2, box[1] + box[3] / 2)
-        track_id_to_label[cls_id] = id1name[cls_id] if cls_id < len(id1name) else "unknown"
+    for track in prev_tracks:
+        if not track.is_confirmed():
+            continue
 
-        print("class",track_id_to_label)
+        track_id = track.track_id
+        x1, y1, x2, y2 = map(int, track.to_ltrb())
+        track_center = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
+
+        # 最も近いクラスを探す
+        min_dist = float('inf')
+        matched_class = "unknown"
+        for det in detections:
+            dx, dy, dw, dh = det[0]
+            dist_x = (dx + dw * 0.5) - track_center[0]
+            dist_y = (dy + dh * 0.5) - track_center[1]
+            dist = dist_x * dist_x + dist_y * dist_y
+            if dist < min_dist:
+                min_dist = dist
+                matched_class = id1name[det[1]] if det[1] < len(id1name) else "unknown"
+                
+        
+
+        if matched_class != "person" and matched_class != "unknown":
+            track_id_to_label[track_id] = matched_class
+            #cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            #cv2.putText(frame, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    if len(detections) > 5:
+            for _ in range(len(detections)-5):
+                del detections[random.randint(0, (len(detections)-1))]
+
+
+
+#######---------########
+
 
     confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
 
-    coordinaite = [0, 0, 0, 0]
+    if randID is None:
+        if confirmed_tracks:
+            randTrack = random.choice(confirmed_tracks)
+            #print(rand_track)
+            randID = randTrack.track_id
+
+            distance_score = 0
+
+            #print(f"選ばれたID:{randID}")
+
+    idList = [track.track_id for track in confirmed_tracks]
     class_name = None
 
-    if randID is None:
-    # "person" または "unknown" を除外した confirmed_tracks を対象にする
-     filtered_tracks = []
-
-    for track in confirmed_tracks:
-        cls_name = track_id_to_label.get(track.track_id, "unknown")
-        if cls_name != "person" and cls_name != "unknown":
-            filtered_tracks.append(track)
-
-    if filtered_tracks:
-        randTrack = random.choice(filtered_tracks)
-        randID = randTrack.track_id
-        distance_score = 0
-        print(f"選ばれたID:{randID}")
-        print(f"選ばれたクラス:{track_id_to_label.get(randID, 'unknown')}")
-
-    print("すべてのTrackのクラス:", [track_id_to_label.get(track.track_id, "unknown") for track in confirmed_tracks])
-
-    # IDが見つかったか確認
-    idList = [track.track_id for track in confirmed_tracks]
     if randID in idList:
-        for track in confirmed_tracks:
-            if track.track_id == randID:
-                x1, y1, x2, y2 = map(int, track.to_ltrb())
+        for track_2 in confirmed_tracks:
+            if track_2.track_id == randID:
+                #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
+                x1, y1, x2, y2 = map(int , track_2.to_ltrb())
                 coordinaite = [x1, y1, x2, y2]
                 class_name = track_id_to_label.get(track.track_id, "unknown")
-
-                # 距離計算
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
-                distance = math.sqrt((gazePoint[0] - center_x) ** 2 + (gazePoint[1] - center_y) ** 2)
-                distance_score = distance / 100.0
-
-                print(class_name)
-                break
+                
     else:
-        randID = None  # 見失ったらリセット
-        distance_score = 10.0  # 注視してない判定
+        randID = None
+        coordinaite = [0,0,0,0]
 
-    return frame, coordinaite, distance_score, class_name
+#####-----#####-----
 
+    distance_score = 0
+
+    if randID is not None:
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
+
+        # ユークリッド距離を計算
+        distance = math.sqrt((gazePoint[0] - center_x) ** 2 + (gazePoint[1] - center_y) ** 2)
+
+        # 任意の正規化やスケーリング（例えば1000で割るなど）
+        distance_score = distance / 100.0
+
+        #print(f"distance_score = {distance_score:.2f}")
+
+        print(class_name)
+    return frame , coordinaite , distance_score , class_name
 
 async def undistort(cap):
     data = np.load(os.path.join(BASE_DIR, "camera_params.npz"))
     mtx = data["mtx"]
     dist = data["dist"]
 
-    #print(mtx,dist,"aaa")
+    print(mtx,dist,"aaa")
 
     # 歪み補正を適用
     undistorted = cv2.undistort(cap, mtx, dist, None, mtx)
-    print(undistorted.shape)
     return undistorted
 
 import pygame
