@@ -9,6 +9,10 @@ import random
 import math
 import time
 import numpy as np
+import pygame
+import time
+import threading
+import os
 
 model = YOLO("yolov8n.pt").to('cuda')
 
@@ -36,6 +40,17 @@ frame_skip = 5  # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sound_path = os.path.join(BASE_DIR, "beep.wav")
+pygame.mixer.init()
+beep = pygame.mixer.Sound(sound_path)
+
+# グローバル制御変数
+running = True
+
+loop_channel = None  # mode=4で使うループ用チャンネル
 
 distance = 3
 randID = None
@@ -141,6 +156,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 print("elapsedTime = ",elapsed_time)
 
             if shotFlag is False and elapsed_time < -3:
+                #シャッター音を再生
+                play_shattersound("shattersound.wav")
                 save_dir = f"Directory_No{count}"
                 if _i_ < 3:
                     os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
@@ -258,14 +275,6 @@ async def find_gaze_near_frame(queue, timestamp, timeout):
                 return next_item
             item = next_item
 
-def play_shattersound(filename):
-    try:
-        sound = pygame.mixer.Sound(filename)
-        sound.play()
-        while pygame.mixer.get_busy():
-            pygame.time.delay(100)
-    except pygame.error as e:
-        print(f"エラー: {e}")
 
 def tracking(frame , gazePoint):
     global frame_count, prev_detections, prev_tracks, randID , distance_score
@@ -401,23 +410,16 @@ async def undistort(cap):
     undistorted = cv2.undistort(cap, mtx, dist, None, mtx)
     return undistorted
 
-import pygame
-import time
-import threading
-import os
 
-# パス設定（どこから実行してもOK）
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sound_path = os.path.join(BASE_DIR, "beep.wav")
+def play_shattersound(filename):
+    try:
+        sound = pygame.mixer.Sound(filename)
+        sound.play()
+        while pygame.mixer.get_busy():
+            pygame.time.delay(100)
+    except pygame.error as e:
+        print(f"エラー: {e}")
 
-# グローバル制御変数
-running = True
-
-loop_channel = None  # mode=4で使うループ用チャンネル
-
-# 初期化
-pygame.mixer.init()
-beep = pygame.mixer.Sound(sound_path)
 
 def beep_loop():
     
