@@ -9,21 +9,15 @@ import random
 import math
 import time
 import numpy as np
-import pygame
-import threading
-# from PIL import Image, ImageDraw
 
 model = YOLO("yolov8n.pt").to('cuda')
 
-tracker = DeepSort(max_age=15,
-    n_init=3,
-    nn_budget=100,
-    max_cosine_distance=0.4,
-    embedder="mobilenet",
-    half=True,
-    bgr=True,
-    embedder_gpu=True
-    )
+tracker = DeepSort(max_age=30)
+    #embedder="mobilenet",
+    #half=True,
+    #bgr=True,
+    #embedder_gpu=True
+    #)
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -39,11 +33,6 @@ frame_skip = 5  # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
-
-# グローバル制御変数
-running = True
-
-loop_channel = None  # mode=4で使うループ用チャンネル
 
 distance = 3
 randID = None
@@ -130,7 +119,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
     ###
 
-        if score < 2.5 and  shotFlag is False :
+        if score < 2.5 :
             #４は連続音
             current_mode = 4
             b = 0
@@ -148,9 +137,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 elapsed_time = start_time - end_time
                 print("elapsedTime = ",elapsed_time)
 
-            if elapsed_time < -3:
-                #シャッター音を再生
-                await play_shattersound("shattersound.wav")
+            if shotFlag is False and elapsed_time < -3:
                 save_dir = f"Directory_No{count}"
                 if _i_ < 3:
                     os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
@@ -195,8 +182,6 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                         base_img[luy:rby, lux:rbx] = blended
                         cv2.imwrite(file_path, base_img)
-                        #画像をflask用に保存
-                        cv2.imwrite('static/images/generated_image.png', base_img)
 
 
 ###########################################################
@@ -271,6 +256,7 @@ async def find_gaze_near_frame(queue, timestamp, timeout):
             item = next_item
 
 
+
 def tracking(frame , gazePoint):
     global frame_count, prev_detections, prev_tracks, randID , distance_score
 
@@ -296,50 +282,37 @@ def tracking(frame , gazePoint):
          #推論スキップ中は前回のトラッカー結果のみ使用
         detections = prev_detections
     id1name = model.names
-    #track_id_to_label = {}
-    confirmed_tracks = []
-    idList = []
+    track_id_to_label = {}
 
     for track in prev_tracks:
-        #if not track.is_confirmed():
-         #   continue
+        if not track.is_confirmed():
+            continue
 
-        #idList.append(track.track_id)
+        track_id = track.track_id
         x1, y1, x2, y2 = map(int, track.to_ltrb())
         track_center = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
 
         # 最も近いクラスを探す
         min_dist = float('inf')
-        #matched_class = "unknown"
-        #i = 0
-        for det in detections :
-            #print(f"cls={id1name[det[1]]} clsID={det[1]}")
-            if det[1] < len(id1name) and id1name[det[1]] not in ['person'] and id1name[det[1]] not in ['unknown']:#もしそのオブジェクトのクラスがperso , unknown だったらばいちゃ
-                dx, dy, dw, dh = det[0]
-                dist_x = (dx + dw * 0.5) - track_center[0]
-                dist_y = (dy + dh * 0.5) - track_center[1]
-                dist = dist_x * dist_x + dist_y * dist_y
-
-                
-                setattr(track,"class_id",det[1])
-                #det.append(i)
-                #i += 1
-                #confirmed_tracks.append(det)
-                
-                if dist < min_dist:
-                    min_dist = dist
-                    #nearest_det = det
-                    #matched_class = id1name[det[1]]
+        matched_class = "unknown"
+        for det in detections:
+            dx, dy, dw, dh = det[0]
+            dist_x = (dx + dw * 0.5) - track_center[0]
+            dist_y = (dy + dh * 0.5) - track_center[1]
+            dist = dist_x * dist_x + dist_y * dist_y
+            if dist < min_dist:
+                min_dist = dist
+                matched_class = id1name[det[1]] if det[1] < len(id1name) else "unknown"
                 
         
-#ここはよくわからない
-     #   if matched_class != "person" and matched_class != "unknown":
-      #      track_id_to_label[track_id] = matched_class
+
+        if matched_class != "person" and matched_class != "unknown":
+            track_id_to_label[track_id] = matched_class
             #cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            #cv2.putText(frame, f"ID: {track.track_id} ",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-    #if len(detections) > 5:
-       #     for _ in range(len(detections)-5):
-          #      del detections[random.randint(0, (len(detections)-1))]
+            #cv2.putText(frame, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    if len(detections) > 5:
+            for _ in range(len(detections)-5):
+                del detections[random.randint(0, (len(detections)-1))]
 
 
 
@@ -350,29 +323,24 @@ def tracking(frame , gazePoint):
 
     if randID is None:
         if confirmed_tracks:
-            #検出対象が変わった音を再生
-            sound = pygame.mixer.Sound("changesound.wav")
-            sound.play()
             randTrack = random.choice(confirmed_tracks)
             #print(rand_track)
             randID = randTrack.track_id
 
             distance_score = 0
 
-            print(f"選ばれたID:{randID}")
+            #print(f"選ばれたID:{randID}")
 
     idList = [track.track_id for track in confirmed_tracks]
     class_name = None
 
     if randID in idList:
         for track_2 in confirmed_tracks:
-            
             if track_2.track_id == randID:
-                class_id = getattr(track,"class_id",None)
                 #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
                 x1, y1, x2, y2 = map(int , track_2.to_ltrb())
                 coordinaite = [x1, y1, x2, y2]
-                class_name = id1name[class_id]
+                class_name = track_id_to_label.get(track.track_id, "unknown")
                 
     else:
         randID = None
@@ -408,23 +376,23 @@ async def undistort(cap):
     undistorted = cv2.undistort(cap, mtx, dist, None, mtx)
     return undistorted
 
+import pygame
+import time
+import threading
+import os
 
-
+# パス設定（どこから実行してもOK）
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sound_path = os.path.join(BASE_DIR, "beep.wav")
+
+# グローバル制御変数
+running = True
+
+loop_channel = None  # mode=4で使うループ用チャンネル
+
+# 初期化
 pygame.mixer.init()
 beep = pygame.mixer.Sound(sound_path)
-
-
-async def play_shattersound(filename):
-    try:
-        sound = pygame.mixer.Sound(filename)
-        sound.play()
-        # while pygame.mixer.get_busy():
-        #     pygame.time.delay(1)
-    except pygame.error as e:
-        print(f"エラー: {e}")
-
 
 def beep_loop():
     

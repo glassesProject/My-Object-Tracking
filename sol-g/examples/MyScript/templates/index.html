@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>リアルタイム画像表示</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+<body>
+  <h1>Captured image</h1>
+  <img id="generated" src="">
+
+  <div id="infoText" class="text"></div>
+  <!-- <button id="actionButton" class="hidden">continue</button> -->
+
+<script>
+  const img = document.getElementById('generated');
+  // const button = document.getElementById('actionButton');
+  const infoText = document.getElementById('infoText');
+
+  let lastImageTime = 0;
+  //let shouldCheckSystemStatus = false; // ← 状態フラグ！
+
+  async function checkImageUpdate() {
+    try {
+      
+      const res = await fetch('/image_status');
+      const data = await res.json();
+      console.log("更新時間" + data.last_updated + " : 最終画像の更新時間" + lastImageTime);
+
+      if (data.last_updated > lastImageTime) {
+        await refreshImage();
+        lastImageTime = data.last_updated;
+        // checkSystemStatus();
+      }
+      // else
+      // {
+      //   checkSystemStatus();
+      // }
+    } catch (err) {
+      console.error('画像チェックエラー:', err);
+    }
+  }
+
+  async function refreshImage() {
+    //await fetch('/create_flag', { method: 'POST' });
+    console.log('要素は hidden クラスを持っています');
+    const timestamp = new Date().getTime();
+    img.src = `/static/images/generated_image.png?t=${timestamp}`;
+    button.classList.remove("hidden");
+    button.disabled = false;
+    infoText.textContent = "Get Tsukumo image!!";
+    console.log("画像を更新");
+
+    // 🔴 状態フラグOFF → checkSystemStatus を一時停止
+    //shouldCheckSystemStatus = false;
+  }
+
+  // async function checkSystemStatus() {  
+  //   if (!button.classList.contains('hidden')) {
+  //     // ボタンが表示されている場合画像生成を止める
+  //     await fetch('/stopcreate');
+  //     console.log('ボタン非表示中');
+      
+  //   }else{
+  //     // ボタンが表示されていない場合画像生成を再開
+  //     await fetch('/iscreate');
+  //     console.log('ボタン表示中');
+
+
+  //     if (!shouldCheckSystemStatus) return; // 🔴 呼び出しブロック！
+  //     try {
+  //       const res = await fetch('/system_status');
+  //       const data = await res.json();
+
+  //       if (data.status === true) {
+  //         img.src = '/static/images/yes.jpg';
+  //         infoText.textContent = "Conecting SOL GLASSES!";
+  //         button.classList.add("hidden");
+  //         console.log("〇画像を表示");
+  //       } else {
+  //         img.src = '/static/images/no.jpg';
+  //         infoText.textContent = "Missing SOL GLASSES・・・";
+  //         button.classList.add("hidden");
+  //       }
+  //       console.log("〇画像を表示end");
+  //     } catch (err) {
+  //       console.error('ステータス読み込みエラー:', err);
+  //     }
+  //   }
+
+  // }
+
+  // button.addEventListener('click', async () => {
+  //   console.log("ボタンがクリックされました");
+
+  //   button.disabled = true;
+  //   button.classList.add("hidden");
+
+  //   // 🔵 状態フラグON → checkSystemStatus を再開
+  //   shouldCheckSystemStatus = true;
+  // });
+
+  // 0.5秒ごとに定期チェック（状態フラグによって分岐）
+  setInterval(() => {
+    checkImageUpdate();
+     // フラグによって無効化・再開
+  }, 500);
+
+</script>
+
+
+</body>
+</html>
