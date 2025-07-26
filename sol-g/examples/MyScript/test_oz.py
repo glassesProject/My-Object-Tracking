@@ -11,6 +11,7 @@ import time
 import numpy as np
 import pygame
 import threading
+# from PIL import Image, ImageDraw
 
 model = YOLO("yolov8n.pt").to('cuda')
 
@@ -194,6 +195,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                         base_img[luy:rby, lux:rbx] = blended
                         cv2.imwrite(file_path, base_img)
+                        #画像をflask用に保存
+                        cv2.imwrite('static/images/generated_image.png', base_img)
 
 
 ###########################################################

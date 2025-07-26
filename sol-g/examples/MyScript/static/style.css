@@ -1,0 +1,50 @@
+/* static/style.css */
+/* 追加：ボタンのスタイル */
+#actionButton {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 24px;
+    font-size: 16px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    z-index: 1000;
+}
+
+#actionButton:hover {
+    background-color: #218838;
+}
+
+#actionButton:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+}
+
+/* 非表示用 */
+.hidden {
+    display: none;
+}
+
+body {
+    background-color: black;
+    color: white;
+    text-align: center;
+    font-size: 1.2em;
+    margin: 0;
+    padding: 0;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    margin-top: 20px;
+}
+
+.text {
+    margin: 20px;
+}
