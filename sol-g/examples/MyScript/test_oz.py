@@ -12,12 +12,15 @@ import numpy as np
 
 model = YOLO("yolov8n.pt").to('cuda')
 
-tracker = DeepSort(max_age=30)
-    #embedder="mobilenet",
-    #half=True,
-    #bgr=True,
-    #embedder_gpu=True
-    #)
+tracker = DeepSort(max_age=15,
+    n_init=3,
+    nn_budget=100,
+    max_cosine_distance=0.4,
+    embedder="mobilenet",
+    half=True,
+    bgr=True,
+    embedder_gpu=True
+    )
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -255,7 +258,14 @@ async def find_gaze_near_frame(queue, timestamp, timeout):
                 return next_item
             item = next_item
 
-
+def play_shattersound(filename):
+    try:
+        sound = pygame.mixer.Sound(filename)
+        sound.play()
+        while pygame.mixer.get_busy():
+            pygame.time.delay(100)
+    except pygame.error as e:
+        print(f"エラー: {e}")
 
 def tracking(frame , gazePoint):
     global frame_count, prev_detections, prev_tracks, randID , distance_score
@@ -284,30 +294,37 @@ def tracking(frame , gazePoint):
     id1name = model.names
     #track_id_to_label = {}
     confirmed_tracks = []
+    idList = []
 
     for track in prev_tracks:
-        if not track.is_confirmed():
-            continue
+        #if not track.is_confirmed():
+         #   continue
 
-        track_id = track.track_id
+        #idList.append(track.track_id)
         x1, y1, x2, y2 = map(int, track.to_ltrb())
         track_center = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
 
         # 最も近いクラスを探す
         min_dist = float('inf')
-        matched_class = "unknown"
-        i = 0
+        #matched_class = "unknown"
+        #i = 0
         for det in detections :
+            #print(f"cls={id1name[det[1]]} clsID={det[1]}")
             if det[1] < len(id1name) and id1name[det[1]] not in ['person'] and id1name[det[1]] not in ['unknown']:#もしそのオブジェクトのクラスがperso , unknown だったらばいちゃ
                 dx, dy, dw, dh = det[0]
                 dist_x = (dx + dw * 0.5) - track_center[0]
                 dist_y = (dy + dh * 0.5) - track_center[1]
                 dist = dist_x * dist_x + dist_y * dist_y
+
+                
+                setattr(track,"class_id",det[1])
                 #det.append(i)
                 #i += 1
-                confirmed_tracks.append(det)
+                #confirmed_tracks.append(det)
+                
                 if dist < min_dist:
                     min_dist = dist
+                    #nearest_det = det
                     #matched_class = id1name[det[1]]
                 
         
@@ -315,38 +332,40 @@ def tracking(frame , gazePoint):
      #   if matched_class != "person" and matched_class != "unknown":
       #      track_id_to_label[track_id] = matched_class
             #cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            #cv2.putText(frame, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-    if len(detections) > 5:
-            for _ in range(len(detections)-5):
-                del detections[random.randint(0, (len(detections)-1))]
+            #cv2.putText(frame, f"ID: {track.track_id} ",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    #if len(detections) > 5:
+       #     for _ in range(len(detections)-5):
+          #      del detections[random.randint(0, (len(detections)-1))]
 
 
 
 #######---------########
 
 
-    #confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
+    confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
 
     if randID is None:
         if confirmed_tracks:
             randTrack = random.choice(confirmed_tracks)
             #print(rand_track)
-            randID = randTrack[0]
+            randID = randTrack.track_id
 
             distance_score = 0
 
-            #print(f"選ばれたID:{randID}")
+            print(f"選ばれたID:{randID}")
 
     idList = [track.track_id for track in confirmed_tracks]
     class_name = None
 
     if randID in idList:
         for track_2 in confirmed_tracks:
+            
             if track_2.track_id == randID:
+                class_id = getattr(track,"class_id",None)
                 #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
                 x1, y1, x2, y2 = map(int , track_2.to_ltrb())
                 coordinaite = [x1, y1, x2, y2]
-                class_name = track_2[1]
+                class_name = id1name[class_id]
                 
     else:
         randID = None
