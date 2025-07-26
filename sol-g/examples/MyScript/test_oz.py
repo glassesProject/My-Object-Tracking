@@ -10,9 +10,7 @@ import math
 import time
 import numpy as np
 import pygame
-import time
 import threading
-import os
 
 model = YOLO("yolov8n.pt").to('cuda')
 
@@ -40,12 +38,6 @@ frame_skip = 5  # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
-
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sound_path = os.path.join(BASE_DIR, "beep.wav")
-pygame.mixer.init()
-beep = pygame.mixer.Sound(sound_path)
 
 # グローバル制御変数
 running = True
@@ -137,7 +129,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
     ###
 
-        if score < 2.5 :
+        if score < 2.5 and  shotFlag is False :
             #４は連続音
             current_mode = 4
             b = 0
@@ -155,9 +147,9 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 elapsed_time = start_time - end_time
                 print("elapsedTime = ",elapsed_time)
 
-            if shotFlag is False and elapsed_time < -3:
+            if elapsed_time < -3:
                 #シャッター音を再生
-                play_shattersound("shattersound.wav")
+                await play_shattersound("shattersound.wav")
                 save_dir = f"Directory_No{count}"
                 if _i_ < 3:
                     os.makedirs(save_dir, exist_ok=True)  # フォルダが無ければ作成
@@ -355,6 +347,9 @@ def tracking(frame , gazePoint):
 
     if randID is None:
         if confirmed_tracks:
+            #検出対象が変わった音を再生
+            sound = pygame.mixer.Sound("changesound.wav")
+            sound.play()
             randTrack = random.choice(confirmed_tracks)
             #print(rand_track)
             randID = randTrack.track_id
@@ -411,12 +406,19 @@ async def undistort(cap):
     return undistorted
 
 
-def play_shattersound(filename):
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sound_path = os.path.join(BASE_DIR, "beep.wav")
+pygame.mixer.init()
+beep = pygame.mixer.Sound(sound_path)
+
+
+async def play_shattersound(filename):
     try:
         sound = pygame.mixer.Sound(filename)
         sound.play()
-        while pygame.mixer.get_busy():
-            pygame.time.delay(100)
+        # while pygame.mixer.get_busy():
+        #     pygame.time.delay(1)
     except pygame.error as e:
         print(f"エラー: {e}")
 
