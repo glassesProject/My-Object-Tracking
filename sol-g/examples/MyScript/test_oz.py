@@ -161,13 +161,16 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     # 保存するファイルパス
                     file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
 
-                    #新聞紙に貼るようにファイルパスを保存
-                    imagepaths.append(file_path)
+                    
 
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
 
                     image_create(file_path,newCenter,className)
+
+                    #新聞紙に貼るようにファイルパスを保存
+                    imagepaths.append(file_path)
+
                     if _i_ == 2:
                         #ここに新聞を作る関数を設置予定
                         combinateimage.overlay_images_on_newspaper(imagepaths[0],imagepaths[1],imagepaths[2])
@@ -286,8 +289,8 @@ def image_create(filpath , nwcen , cls):
     try:
         overlay_img = cv2.imread(f"tsukumo_image/{cls}.png", cv2.IMREAD_UNCHANGED)
     except:
-        print("がぞうないよ")
-        return
+        print(cls)
+        overlay_img = cv2.imread(f"tsukumo_image/cursor.png", cv2.IMREAD_UNCHANGED)
 
     x, y = (nwcen[0]+nwcen[2])//2, (nwcen[1]+nwcen[3])//2
     h, w = overlay_img.shape[:2]
