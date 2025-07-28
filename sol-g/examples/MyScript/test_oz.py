@@ -35,7 +35,7 @@ from ganzin.sol_sdk.common_models import Camera
 
 
 # 事前に定義（グローバル）
-frame_skip = 5  # Nフレームに1回だけYOLO + DeepSORT実行
+frame_skip = 3  # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
@@ -161,42 +161,42 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
 
-
+                    image_create(file_path,newCenter,className)
 
 ###################################################
 
 
                     #if className == "tv":
-                    base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
-                    overlay_img = cv2.imread("image/PCchan.png", cv2.IMREAD_UNCHANGED)
+                    # base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
+                    # overlay_img = cv2.imread("image/PCchan.png", cv2.IMREAD_UNCHANGED)
 
-                    x, y = (newCenter[0]+newCenter[2])//2, (newCenter[1]+newCenter[3])//2
-                    h, w = overlay_img.shape[:2]
-                    lux = x - w//2
-                    luy = y - h//2
-                    rbx = lux + w 
-                    rby = luy + h 
+                    # x, y = (newCenter[0]+newCenter[2])//2, (newCenter[1]+newCenter[3])//2
+                    # h, w = overlay_img.shape[:2]
+                    # lux = x - w//2
+                    # luy = y - h//2
+                    # rbx = lux + w 
+                    # rby = luy + h 
 
-                    # 範囲チェック
-                    if luy + h > base_img.shape[0] or lux + w > base_img.shape[1] or luy<0 or lux <0:
-                        print("範囲外です")
-                    else:
-                        roi = base_img[luy:rby, lux:rbx].copy()
+                    # # 範囲チェック
+                    # if luy + h > base_img.shape[0] or lux + w > base_img.shape[1] or luy<0 or lux <0:
+                    #     print("範囲外です")
+                    # else:
+                    #     roi = base_img[luy:rby, lux:rbx].copy()
 
-                        overlay_rgb = overlay_img[:, :, :3]
-                        alpha = overlay_img[:, :, 3] / 255.0
-                        alpha = alpha[:, :, np.newaxis]
+                    #     overlay_rgb = overlay_img[:, :, :3]
+                    #     alpha = overlay_img[:, :, 3] / 255.0
+                    #     alpha = alpha[:, :, np.newaxis]
 
-                        if roi.shape != overlay_rgb.shape:
-                            print("サイズ違い検出: roi.shape =", roi.shape, " overlay_rgb.shape =", overlay_rgb.shape)
-                            roi = cv2.resize(roi, (overlay_rgb.shape[1], overlay_rgb.shape[0]))
+                    #     if roi.shape != overlay_rgb.shape:
+                    #         print("サイズ違い検出: roi.shape =", roi.shape, " overlay_rgb.shape =", overlay_rgb.shape)
+                    #         roi = cv2.resize(roi, (overlay_rgb.shape[1], overlay_rgb.shape[0]))
 
-                        blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
+                    #     blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
 
-                        base_img[luy:rby, lux:rbx] = blended
-                        cv2.imwrite(file_path, base_img)
-                        #画像をflask用に保存
-                        cv2.imwrite('static/images/generated_image.png', base_img)
+                    #     base_img[luy:rby, lux:rbx] = blended
+                    #     cv2.imwrite(file_path, base_img)
+                    #     #画像をflask用に保存
+                    #     cv2.imwrite('static/images/generated_image.png', base_img)
 
 
 ###########################################################
@@ -206,6 +206,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     print("shoted")
                     box_flag = True
                 else:
+                    #ここに新聞を作る関数を設置予定
                     count += 1
                     _i_ = 0
 
@@ -270,6 +271,41 @@ async def find_gaze_near_frame(queue, timestamp, timeout):
                 return next_item
             item = next_item
 
+def image_create(filpath , nwcen , cls):
+    base_img = cv2.imread(f"rawData/No{count}_{_i_}.png")
+    try:
+        overlay_img = cv2.imread(f"tsukumo_image/{cls}.png", cv2.IMREAD_UNCHANGED)
+    except:
+        print("がぞうないよ")
+        return
+
+    x, y = (nwcen[0]+nwcen[2])//2, (nwcen[1]+nwcen[3])//2
+    h, w = overlay_img.shape[:2]
+    lux = x - w//2
+    luy = y - h//2
+    rbx = lux + w 
+    rby = luy + h 
+
+    # 範囲チェック
+    if luy + h > base_img.shape[0] or lux + w > base_img.shape[1] or luy<0 or lux <0:
+        print("範囲外です")
+    else:
+        roi = base_img[luy:rby, lux:rbx].copy()
+
+        overlay_rgb = overlay_img[:, :, :3]
+        alpha = overlay_img[:, :, 3] / 255.0
+        alpha = alpha[:, :, np.newaxis]
+
+        if roi.shape != overlay_rgb.shape:
+            print("サイズ違い検出: roi.shape =", roi.shape, " overlay_rgb.shape =", overlay_rgb.shape)
+            roi = cv2.resize(roi, (overlay_rgb.shape[1], overlay_rgb.shape[0]))
+
+        blended = (overlay_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
+
+        base_img[luy:rby, lux:rbx] = blended
+        cv2.imwrite(filpath, base_img)
+        #画像をflask用に保存
+        cv2.imwrite('static/images/generated_image.png', base_img)
 
 def tracking(frame , gazePoint):
     global frame_count, prev_detections, prev_tracks, randID , distance_score
@@ -348,7 +384,7 @@ def tracking(frame , gazePoint):
 
     confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
 
-    if randID is None:
+    if randID is None :
         if confirmed_tracks:
             #検出対象が変わった音を再生
             sound = pygame.mixer.Sound("changesound.wav")
