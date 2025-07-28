@@ -11,6 +11,8 @@ import time
 import numpy as np
 import pygame
 import threading
+#新聞紙作成スクリプト
+import combinateimage
 # from PIL import Image, ImageDraw
 
 model = YOLO("yolov8n.pt").to('cuda')
@@ -106,6 +108,7 @@ async def collect_gaze(ac: AsyncClient, queue: asyncio.Queue, error_event: async
 
 async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout):
     global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag,current_mode
+    imagepaths = []
 
     
     
@@ -158,11 +161,17 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     # 保存するファイルパス
                     file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
 
+                    #新聞紙に貼るようにファイルパスを保存
+                    imagepaths.append(file_path)
+
                     # 画像として保存
                     cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
 
                     image_create(file_path,newCenter,className)
-
+                    if _i_ == 2:
+                        #ここに新聞を作る関数を設置予定
+                        combinateimage.overlay_images_on_newspaper(imagepaths[0],imagepaths[1],imagepaths[2])
+                        imagepaths.clear()
 ###################################################
 
 
@@ -205,8 +214,9 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     shotFlag = True
                     print("shoted")
                     box_flag = True
+                
                 else:
-                    #ここに新聞を作る関数を設置予定
+
                     count += 1
                     _i_ = 0
 
