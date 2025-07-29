@@ -65,6 +65,9 @@ shotFlag = False
 time_flag = False
 box_flag = False
 
+
+remove_id = []
+
 async def main():
     address, port = get_ip_and_port()
     timeout_seconds = 5.0
@@ -108,7 +111,7 @@ async def collect_gaze(ac: AsyncClient, queue: asyncio.Queue, error_event: async
         error_event.set()
 
 async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout):
-    global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag,current_mode
+    global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag,current_mode,remove_id,randID
     imagepaths = []
 
     
@@ -216,6 +219,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                     _i_ += 1
                     shotFlag = True
+                    remove_id.append(randID)
                     print("shoted")
                     box_flag = True
                 
@@ -223,6 +227,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                     count += 1
                     _i_ = 0
+                    remove_id = []
 
                     #オブジェクトと視線が少し近い
         elif score < 3 :
@@ -269,12 +274,13 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
         if box_flag is False:
             cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (b, g, r), 2)
-        #cv2.putText(new_frame_buffer, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            #cv2.putText(new_frame_buffer, f"ID: {randID}", cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
        # print(center)
 
         radius = 30
         bgr_color = (255, 255, 0)
         thickness = 5
+
         cv2.circle(new_frame_buffer, center, radius, bgr_color, thickness)
 
         cv2.imshow('Press "q" to exit', new_frame_buffer)
@@ -284,6 +290,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
         elif key == ord('a'):
             shotFlag = False
             box_flag = False
+            randID = None
 
 async def get_video_frame(queue, timeout):
     return await asyncio.wait_for(queue.get(), timeout=timeout)
@@ -339,7 +346,7 @@ def image_create(filpath , nwcen , cls):
         cv2.imwrite('static/images/generated_image.png', base_img)
 
 def tracking(frame , gazePoint):
-    global frame_count, prev_detections, prev_tracks, randID , distance_score
+    global frame_count, prev_detections, prev_tracks, randID , distance_score,remove_id
 
     frame_count += 1
     run_detection = (frame_count % frame_skip == 0)
@@ -413,7 +420,7 @@ def tracking(frame , gazePoint):
 #######---------########
 
 
-    confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
+    confirmed_tracks = [track for track in prev_tracks if track.is_confirmed() and track.track_id not in remove_id]
 
     if randID is None :
         if confirmed_tracks:
@@ -421,9 +428,16 @@ def tracking(frame , gazePoint):
             sound = pygame.mixer.Sound("changesound.wav")
             sound.play()
 
+            random.seed(int(time.time()))
             randTrack = random.choice(confirmed_tracks)
             #print(rand_track)
             randID = randTrack.track_id
+
+
+            
+
+            with open("debuglog.txt", "a", encoding="utf-8") as f:
+                f.write(f"randID:{randID} , removeID:{remove_id}\n")
 
             distance_score = 0
 
