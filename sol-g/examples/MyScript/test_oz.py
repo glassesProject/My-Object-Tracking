@@ -37,7 +37,7 @@ from ganzin.sol_sdk.common_models import Camera
 
 
 # 事前に定義（グローバル）
-frame_skip = 4  # Nフレームに1回だけYOLO + DeepSORT実行
+frame_skip = 2 # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
@@ -229,7 +229,9 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             #3番は短い間隔の音
             set_mode(5)
             b = 255
+            time_flag = False
             start_time = 0
+            end_time = 0
             r = 255
             g = 0
         elif score < 5.5 :
@@ -237,6 +239,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             set_mode(3)
             b = 255
             start_time = 0
+            end_time = 0
             r = 0
             g = 0
 
@@ -248,6 +251,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             set_mode(2)
             b = 0
             start_time = 0
+            end_time = 0
             r = 0
             g = 255
 
@@ -257,6 +261,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             #3番は短い間隔の音
             set_mode(1)
             start_time = 0
+            end_time = 0
             g = 255
             r = 255
             b = 0
@@ -470,7 +475,7 @@ async def undistort(cap):
     mtx = data["mtx"]
     dist = data["dist"]
 
-    print(mtx,dist,"aaa")
+    #print(mtx,dist,"aaa")
 
     # 歪み補正を適用
     undistorted = cv2.undistort(cap, mtx, dist, None, mtx)
@@ -518,7 +523,7 @@ def set_mode(new_mode):
 
 def beep_loop():
     global loop_channel, current_mode, score
-    print("音声ループ開始", current_mode)
+    #print("音声ループ開始", current_mode)
 
     while running:
         print("音声ループ中", current_mode)
@@ -549,7 +554,7 @@ def beep_loop():
             loop_channel = None
 
         channel = beep.play()
-        print("音声再生")
+        #print("音声再生")
         while channel.get_busy():
             mode_event.wait(timeout=0.01)
 
