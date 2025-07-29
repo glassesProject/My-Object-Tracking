@@ -37,7 +37,7 @@ from ganzin.sol_sdk.common_models import Camera
 
 
 # 事前に定義（グローバル）
-frame_skip = 3  # Nフレームに1回だけYOLO + DeepSORT実行
+frame_skip = 4  # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
@@ -237,7 +237,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             set_mode(3)
             b = 255
             start_time = 0
-            r = 255
+            r = 0
             g = 0
 
             time_flag = False
