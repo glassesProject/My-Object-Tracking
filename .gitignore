@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 *.pyc
-
+*.png
 # 生成されるデータと出力
 rawData/
 Directory_No*/
