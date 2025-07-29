@@ -226,7 +226,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
         
             #オブジェクトと視線が少し近い
-        elif score < 4.5 :
+        elif score < 6.5 :
             #3番は短い間隔の音
             set_mode(3)
             b = 255
@@ -514,7 +514,9 @@ def beep_loop():
             continue
 
         elif current_mode == 3:
-            interval = score
+            interval = score - 0.5
+            if(interval < 0.2):
+                interval = 0.2
         elif current_mode == 4:
             if not loop_channel or not loop_channel.get_busy():
                 loop_channel = beep.play(loops=-1)
