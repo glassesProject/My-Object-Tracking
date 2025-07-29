@@ -50,6 +50,7 @@ loop_channel = None  # mode=4で使うループ用チャンネル
 distance = 3
 randID = None
 distance_score = None
+score = None
 
 b = 0
 g = 0
@@ -135,7 +136,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
         if score < 2.5 and  shotFlag is False :
             #４は連続音
-            current_mode = 4
+            set_mode(4)
             b = 0
             g = 0
             r = 255
@@ -149,7 +150,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 end_time = time.time()
                 #print("endTime = ",end_time)
                 elapsed_time = start_time - end_time
-                print("elapsedTime = ",elapsed_time)
+                print("注視時間 = ",elapsed_time)
 
             if elapsed_time < -3:
                 #シャッター音を再生
@@ -227,7 +228,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             #オブジェクトと視線が少し近い
         elif score < 4.5 :
             #3番は短い間隔の音
-            current_mode = 3
+            set_mode(3)
             b = 255
             start_time = 0
             r = 255
@@ -237,7 +238,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
             #オブジェクトと視線が離れている
         else :
             #3番は短い間隔の音
-            current_mode = 1
+            set_mode(1)
             start_time = 0
             g = 255
             r = 255
@@ -402,6 +403,7 @@ def tracking(frame , gazePoint):
             #検出対象が変わった音を再生
             sound = pygame.mixer.Sound("changesound.wav")
             sound.play()
+
             randTrack = random.choice(confirmed_tracks)
             #print(rand_track)
             randID = randTrack.track_id
@@ -475,36 +477,52 @@ async def play_shattersound(filename):
         print(f"エラー: {e}")
 
 
+import threading
+import time
+import pygame
+
+pygame.mixer.init()
+beep = pygame.mixer.Sound('beep.wav')  # 任意のbeep音ファイル
+
+# グローバル変数
+current_mode = 1
+score = 1.0
+loop_channel = None
+running = True
+
+# イベント通知用
+mode_event = threading.Event()
+
+def set_mode(new_mode):
+    global current_mode
+    current_mode = new_mode
+    mode_event.set()  # beep_loop を中断させる
+    mode_event.clear()
+
 def beep_loop():
-    
-    global loop_channel,current_mode
-    print("音声ループ開始" , current_mode)
-    
+    global loop_channel, current_mode, score
+    print("音声ループ開始", current_mode)
 
     while running:
-        print("音声ループ中" , current_mode)
+        print("音声ループ中", current_mode)
+
         if current_mode == 1:
-            # 無音モード（停止）
             if loop_channel:
                 loop_channel.stop()
                 loop_channel = None
-            time.sleep(0.1)
+            mode_event.wait(timeout=0.1)
             continue
 
-        elif current_mode == 2:
-            interval = 0.5
         elif current_mode == 3:
-            interval = 0.25
+            interval = score
         elif current_mode == 4:
-            # 鳴り続ける（ループ再生）
             if not loop_channel or not loop_channel.get_busy():
                 loop_channel = beep.play(loops=-1)
-            time.sleep(0.1)
+            mode_event.wait(timeout=0.1)
             continue
         else:
             interval = 1.0
 
-        # ここから再生処理（モード2 or 3）
         if loop_channel:
             loop_channel.stop()
             loop_channel = None
@@ -512,15 +530,22 @@ def beep_loop():
         channel = beep.play()
         print("音声再生")
         while channel.get_busy():
-            time.sleep(0.01)  # 再生終了まで待つ
+            mode_event.wait(timeout=0.01)
 
-        time.sleep(interval)
+        # interruptible wait
+        elapsed = 0.0
+        check_interval = 0.01
+        while elapsed < interval:
+            if current_mode == 4:
+                break
+            mode_event.wait(timeout=check_interval)
+            elapsed += check_interval
 
 def start_beep_thread():
-    print("呼び出すための関数を開始")
     thread = threading.Thread(target=beep_loop)
     thread.daemon = True
     thread.start()
+
 
 
 if __name__ == "__main__":
