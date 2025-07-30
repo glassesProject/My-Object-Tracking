@@ -13,12 +13,13 @@ import pygame
 import threading
 #新聞紙作成スクリプト
 import combinateimage
+import printor
 # from PIL import Image, ImageDraw
 
 model = YOLO("yolov8n.pt").to('cuda')
 
 tracker = DeepSort(max_age=15,
-    n_init=3,
+    n_init=2,
     nn_budget=100,
     max_cosine_distance=0.4,
     embedder="mobilenet",
@@ -37,11 +38,11 @@ from ganzin.sol_sdk.common_models import Camera
 
 
 # 事前に定義（グローバル）
-frame_skip = 2 # Nフレームに1回だけYOLO + DeepSORT実行
+frame_skip = 3 # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
-
+remove_id = []
 # グローバル制御変数
 running = True
 
@@ -108,7 +109,7 @@ async def collect_gaze(ac: AsyncClient, queue: asyncio.Queue, error_event: async
         error_event.set()
 
 async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout):
-    global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag,current_mode
+    global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag,current_mode, remove_id,randID
     imagepaths = []
 
     
@@ -153,6 +154,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                 print("注視時間 = ",elapsed_time)
 
             if elapsed_time < -3:
+                #beep音を停止
+                set_mode(1)
                 #シャッター音を再生
                 await play_shattersound("shattersound.wav")
                 save_dir = f"Directory_No{count}"
@@ -174,8 +177,11 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
                     if _i_ == 2:
                         #ここに新聞を作る関数を設置予定
+                        remove_id.append(randID)
                         combinateimage.overlay_images_on_newspaper(imagepaths[0],imagepaths[1],imagepaths[2])
                         imagepaths.clear()
+                        printor.print_png()
+
 ###################################################
 
 
@@ -220,7 +226,7 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     box_flag = True
                 
                 else:
-
+                    remove_id = []
                     count += 1
                     _i_ = 0
 
@@ -274,19 +280,20 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
         if box_flag is False:
             cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (b, g, r), 2)
-        #cv2.putText(new_frame_buffer, f"ID: {track_id} ,{track_id_to_label[track_id]}",(x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            cv2.putText(new_frame_buffer, f"ID:{className}",(newCenter[0], newCenter[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
        # print(center)
 
         radius = 30
         bgr_color = (255, 255, 0)
         thickness = 5
         cv2.circle(new_frame_buffer, center, radius, bgr_color, thickness)
-
+        show_frame = new_frame_buffer
         cv2.imshow('Press "q" to exit', new_frame_buffer)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             return
         elif key == ord('a'):
+            randID = None
             shotFlag = False
             box_flag = False
 
@@ -313,7 +320,10 @@ def image_create(filpath , nwcen , cls):
         overlay_img = cv2.imread(f"tsukumo_image/{cls}.png", cv2.IMREAD_UNCHANGED)
     except:
         print(cls)
-        overlay_img = cv2.imread(f"tsukumo_image/cursor.png", cv2.IMREAD_UNCHANGED)
+        #ここ#
+        othre = ["ピラミッドの付喪神","牛乳パックの付喪神","320サイズ椅子の付喪神","bottle","cell phone","keyboard","mouse","tv"]
+        othre_name = random.choice(othre)
+        overlay_img = cv2.imread(f"tsukumo_image/{othre_name}.png", cv2.IMREAD_UNCHANGED)
 
     x, y = (nwcen[0]+nwcen[2])//2, (nwcen[1]+nwcen[3])//2
     h, w = overlay_img.shape[:2]
@@ -324,6 +334,9 @@ def image_create(filpath , nwcen , cls):
 
     # 範囲チェック
     if luy + h > base_img.shape[0] or lux + w > base_img.shape[1] or luy<0 or lux <0:
+        
+        
+        
         print("範囲外です")
     else:
         roi = base_img[luy:rby, lux:rbx].copy()
@@ -344,7 +357,7 @@ def image_create(filpath , nwcen , cls):
         cv2.imwrite('static/images/generated_image.png', base_img)
 
 def tracking(frame , gazePoint):
-    global frame_count, prev_detections, prev_tracks, randID , distance_score
+    global frame_count, prev_detections, prev_tracks, randID , distance_score, remove_id
 
     frame_count += 1
     run_detection = (frame_count % frame_skip == 0)
@@ -373,9 +386,9 @@ def tracking(frame , gazePoint):
     idList = []
 
     for track in prev_tracks:
-        #if not track.is_confirmed():
-         #   continue
-
+        
+        if not track.is_confirmed():
+            continue
         #idList.append(track.track_id)
         x1, y1, x2, y2 = map(int, track.to_ltrb())
         track_center = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
@@ -418,7 +431,7 @@ def tracking(frame , gazePoint):
 #######---------########
 
 
-    confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()]
+    confirmed_tracks = [track for track in prev_tracks if track.is_confirmed()  and track.track_id not in remove_id]
 
     if randID is None :
         if confirmed_tracks:
@@ -436,7 +449,12 @@ def tracking(frame , gazePoint):
 
     idList = [track.track_id for track in confirmed_tracks]
     class_name = None
-
+    if idList == []:
+        randID = None
+        distance_score = 100
+        coordinaite = [0,0,0,0]
+        print("debug",randID)
+    print("aaaa",idList)
     if randID in idList:
         for track_2 in confirmed_tracks:
             
@@ -444,8 +462,25 @@ def tracking(frame , gazePoint):
                 class_id = getattr(track,"class_id",None)
                 #print(f"抽選済みID:{randID},座標:{track_2.to_ltrb()}")
                 x1, y1, x2, y2 = map(int , track_2.to_ltrb())
+
+                #ボックスの座標がframeの範囲内に収まるように調整
+                if x1 < 0 :
+                    x1 = 0
+                if y1 < 0 :
+                    y1 = 0
+                if x2 > frame.shape[1] :
+                    x2 = frame.shape[1] 
+                if y2 > frame.shape[0]:
+                    y2 = frame.shape[0]
+                print("ボックスの座標" , x1,":",y1,":",x2,":",y2)
+                
+
                 coordinaite = [x1, y1, x2, y2]
-                class_name = id1name[class_id]
+                
+                if class_id is not None and class_id < len(id1name):
+                    class_name = id1name[class_id]
+                else:
+                    class_name = "unknown"
                 
     else:
         randID = None
@@ -453,7 +488,6 @@ def tracking(frame , gazePoint):
 
 #####-----#####-----
 
-    distance_score = 0
 
     if randID is not None:
         center_x = (x1 + x2) / 2
@@ -491,10 +525,11 @@ beep = pygame.mixer.Sound(sound_path)
 
 async def play_shattersound(filename):
     try:
+        
         sound = pygame.mixer.Sound(filename)
         sound.play()
-        # while pygame.mixer.get_busy():
-        #     pygame.time.delay(1)
+            # while pygame.mixer.get_busy():
+            #     pygame.time.delay(1)
     except pygame.error as e:
         print(f"エラー: {e}")
 
