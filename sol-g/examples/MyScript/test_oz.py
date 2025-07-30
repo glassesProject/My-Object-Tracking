@@ -16,8 +16,9 @@ import combinateimage
 import printor
 # from PIL import Image, ImageDraw
 
-# データ記録機能のためにCSVライブラリをインポート
+# データ記録機能のためにライブラリをインポート
 import csv
+import datetime
 
 model = YOLO("yolov8n.pt").to('cuda')
 
@@ -73,6 +74,13 @@ async def main():
     address, port = get_ip_and_port()
     timeout_seconds = 5.0
 
+    # === データ記録機能：実行ごとにユニークなファイル名を生成 ===
+    now = datetime.datetime.now()
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    log_filename = f'interaction_log_{timestamp}.csv'
+    print(f"今回のログは {log_filename} に保存されます。")
+    # === ここまで ===
+
     async with AsyncClient(address, port) as ac:
         error_event = asyncio.Event()
 
@@ -83,7 +91,8 @@ async def main():
         collect_gaze_task = asyncio.create_task(collect_gaze(ac, gazes, error_event, timeout_seconds))
 
         try:
-            await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds)
+            # ファイル名を渡す
+            await draw_gaze_on_frame(frames, gazes, error_event, timeout_seconds, log_filename)
         finally:
             collect_video_task.cancel()
             collect_gaze_task.cancel()
@@ -107,16 +116,14 @@ async def collect_gaze(ac: AsyncClient, queue: asyncio.Queue, error_event: async
     except Exception as e:
         error_event.set()
 
-async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout):
+# log_filename を引数として受け取るように変更
+async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, timeout, log_filename):
     global b ,g ,r , count , _i_ , shotFlag , time_flag , box_flag,current_mode, remove_id,randID
     imagepaths = []
 
-    # === データ記録機能：変数の初期化 ===
-    csv_file = None
-    csv_writer = None
-    current_log_count = -1 
+    # === データ記録機能：ヘッダーに 'session_count' を追加 ===
     csv_header = [
-        'timestamp', 'frame_count', 'gaze_x', 'gaze_y', 
+        'timestamp', 'frame_count', 'session_count', 'gaze_x', 'gaze_y', 
         'target_track_id', 'target_class_name', 
         'target_coord_x1', 'target_coord_y1', 'target_coord_x2', 'target_coord_y2',
         'distance_score', 'gazing_time'
@@ -125,122 +132,116 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
 
     elapsed_time = 0
 
-    try:
-        while not error_event.is_set():
-            # === データ記録機能：セッション毎のファイル作成 ===
-            if current_log_count != count:
-                if csv_file:
-                    csv_file.close()
-                output_csv_path = f'interaction_log_{count}.csv'
-                csv_file = open(output_csv_path, 'w', newline='', encoding='utf-8')
-                csv_writer = csv.writer(csv_file)
-                csv_writer.writerow(csv_header)
-                print(f"ログファイルを {output_csv_path} として新規作成しました。")
-                current_log_count = count
-            # === ここまで ===
+    # === データ記録機能：ファイルを開く ===
+    # 'w' (上書きモード) でファイルを開き、ヘッダーを書き込む
+    with open(log_filename, 'w', newline='', encoding='utf-8') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(csv_header)
+        # === ここまで ===
 
-            frame = await get_video_frame(frame_queue, timeout)
-            gaze = await find_gaze_near_frame(gazes, frame.get_timestamp(), timeout)
+        try:
+            while not error_event.is_set():
+                frame = await get_video_frame(frame_queue, timeout)
+                gaze = await find_gaze_near_frame(gazes, frame.get_timestamp(), timeout)
 
-            frame_buffer = await undistort(frame.get_buffer())
-            center = (int(gaze.combined.gaze_2d.x), int(gaze.combined.gaze_2d.y))
+                frame_buffer = await undistort(frame.get_buffer())
+                center = (int(gaze.combined.gaze_2d.x), int(gaze.combined.gaze_2d.y))
 
-            if shotFlag is False:
-                new_frame_buffer,newCenter,score,className = tracking(frame_buffer , center)
-            else:
-                new_frame_buffer = frame_buffer
-                # shotFlagがTrueの時のためのプレースホルダー
-                newCenter, score, className = [0,0,0,0], 999, None
+                if shotFlag is False:
+                    new_frame_buffer,newCenter,score,className = tracking(frame_buffer , center)
+                else:
+                    new_frame_buffer = frame_buffer
+                    newCenter, score, className = [0,0,0,0], 999, None
 
-            if score < 1.5 and  shotFlag is False :
-                set_mode(4)
-                b = 0
-                g = 0
-                r = 255
-                if time_flag is False:
-                    start_time = time.time()
-                    print("startTime = ",start_time)
-                    time_flag = True
-                
-                if time_flag is True:
-                    end_time = time.time()
-                    elapsed_time = start_time - end_time
-                    print("注視時間 = ",elapsed_time)
-
-                if elapsed_time < -3:
-                    set_mode(1)
-                    await play_shattersound("shattersound.wav")
-                    save_dir = f"Directory_No{count}"
-                    if _i_ < 3:
-                        os.makedirs(save_dir, exist_ok=True)
-                        file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
-                        
-                        cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
-                        image_create(file_path,newCenter,className)
-                        imagepaths.append(file_path)
-
-                        if _i_ == 2:
-                            remove_id.append(randID)
-                            combinateimage.overlay_images_on_newspaper(imagepaths[0],imagepaths[1],imagepaths[2])
-                            imagepaths.clear()
-                            printor.print_png()
-
-                        _i_ += 1
-                        shotFlag = True
-                        print("shoted")
-                        box_flag = True
+                if score < 1.5 and  shotFlag is False :
+                    set_mode(4)
+                    b = 0
+                    g = 0
+                    r = 255
+                    if time_flag is False:
+                        start_time = time.time()
+                        print("startTime = ",start_time)
+                        time_flag = True
                     
-                    else:
-                        remove_id = []
-                        count += 1
-                        _i_ = 0
+                    if time_flag is True:
+                        end_time = time.time()
+                        elapsed_time = start_time - end_time
+                        print("注視時間 = ",elapsed_time)
 
-            elif score < 3 :
-                set_mode(5)
-                b = 255
-                time_flag = False
-                elapsed_time = 0
-                r = 255
-                g = 0
-            elif score < 5.5 :
-                set_mode(3)
-                b = 255
-                time_flag = False
-                elapsed_time = 0
-                r = 0
-                g = 0
-            elif score < 8 :
-                set_mode(2)
-                b = 0
-                time_flag = False
-                elapsed_time = 0
-                r = 0
-                g = 255
-            else :
-                set_mode(1)
-                time_flag = False
-                elapsed_time = 0
-                g = 255
-                r = 255
-                b = 0
+                    if elapsed_time < -3:
+                        set_mode(1)
+                        await play_shattersound("shattersound.wav")
+                        save_dir = f"Directory_No{count}"
+                        if _i_ < 3:
+                            os.makedirs(save_dir, exist_ok=True)
+                            file_path = os.path.join(save_dir, f"no{count}_,{_i_}.png")
+                            
+                            cv2.imwrite(f"rawData/No{count}_{_i_}.png", new_frame_buffer)
+                            image_create(file_path,newCenter,className)
+                            imagepaths.append(file_path)
 
-            if shotFlag :
-                current_mode = 1
+                            if _i_ == 2:
+                                remove_id.append(randID)
+                                combinateimage.overlay_images_on_newspaper(imagepaths[0],imagepaths[1],imagepaths[2])
+                                imagepaths.clear()
+                                printor.print_png()
 
-            if box_flag is False:
-                cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (b, g, r), 2)
-                cv2.putText(new_frame_buffer, f"ID:{className}",(newCenter[0], newCenter[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                            _i_ += 1
+                            shotFlag = True
+                            print("shoted")
+                            box_flag = True
+                        
+                        else:
+                            remove_id = []
+                            count += 1
+                            _i_ = 0
 
-            radius = 30
-            bgr_color = (255, 255, 0)
-            thickness = 5
-            cv2.circle(new_frame_buffer, center, radius, bgr_color, thickness)
-            
-            # === データ記録機能：CSVファイルへの書き込み ===
-            if csv_writer:
+                elif score < 3 :
+                    set_mode(5)
+                    b = 255
+                    time_flag = False
+                    elapsed_time = 0
+                    r = 255
+                    g = 0
+                elif score < 5.5 :
+                    set_mode(3)
+                    b = 255
+                    time_flag = False
+                    elapsed_time = 0
+                    r = 0
+                    g = 0
+                elif score < 8 :
+                    set_mode(2)
+                    b = 0
+                    time_flag = False
+                    elapsed_time = 0
+                    r = 0
+                    g = 255
+                else :
+                    set_mode(1)
+                    time_flag = False
+                    elapsed_time = 0
+                    g = 255
+                    r = 255
+                    b = 0
+
+                if shotFlag :
+                    current_mode = 1
+
+                if box_flag is False:
+                    cv2.rectangle(new_frame_buffer, (newCenter[0], newCenter[1]), (newCenter[2], newCenter[3]), (b, g, r), 2)
+                    cv2.putText(new_frame_buffer, f"ID:{className}",(newCenter[0], newCenter[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+                radius = 30
+                bgr_color = (255, 255, 0)
+                thickness = 5
+                cv2.circle(new_frame_buffer, center, radius, bgr_color, thickness)
+                
+                # === データ記録機能：CSVファイルへの書き込み ===
                 log_data = [
                     frame.get_timestamp(),
                     frame_count,
+                    count, # session_count を記録
                     center[0],
                     center[1],
                     randID,
@@ -253,22 +254,21 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                     elapsed_time
                 ]
                 csv_writer.writerow(log_data)
-            # === ここまで ===
+                # === ここまで ===
 
-            cv2.imshow('Press "q" to exit', new_frame_buffer)
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                return
-            elif key == ord('a'):
-                randID = None
-                shotFlag = False
-                box_flag = False
-    finally:
-        # === データ記録機能：最後のファイルを閉じる ===
-        if csv_file:
-            csv_file.close()
-            print(f"最後のログファイル {csv_file.name} を閉じました。")
-        # === ここまで ===
+                cv2.imshow('Press "q" to exit', new_frame_buffer)
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
+                    return
+                elif key == ord('a'):
+                    randID = None
+                    shotFlag = False
+                    box_flag = False
+        except Exception as e:
+            print(f"An error occurred in draw_gaze_on_frame: {e}")
+        finally:
+            print("draw_gaze_on_frame loop finished.")
+
 
 async def get_video_frame(queue, timeout):
     return await asyncio.wait_for(queue.get(), timeout=timeout)
@@ -386,7 +386,7 @@ def tracking(frame , gazePoint):
     if randID in idList:
         for track_2 in confirmed_tracks:
             if track_2.track_id == randID:
-                class_id = getattr(track_2,"class_id",None) # track_2から取得するように修正
+                class_id = getattr(track_2,"class_id",None)
                 x1, y1, x2, y2 = map(int , track_2.to_ltrb())
                 if x1 < 0 : x1 = 0
                 if y1 < 0 : y1 = 0
@@ -426,13 +426,12 @@ beep = pygame.mixer.Sound(sound_path)
 
 async def play_shattersound(filename):
     try:
-        sound = pygame.mixer.Sound(os.path.join(BASE_DIR, filename)) # BASE_DIRからのパス指定
+        sound = pygame.mixer.Sound(os.path.join(BASE_DIR, filename))
         sound.play()
     except pygame.error as e:
         print(f"エラー: {e}")
 
 # threading, time, pygame は既にインポート済み
-
 current_mode = 1
 loop_channel = None
 running = True
