@@ -41,7 +41,7 @@ from ganzin.sol_sdk.common_models import Camera
 
 
 # 事前に定義（グローバル）
-frame_skip = 3 # Nフレームに1回だけYOLO + DeepSORT実行
+frame_skip = 2 # Nフレームに1回だけYOLO + DeepSORT実行
 frame_count = 0
 prev_detections = []
 prev_tracks = []
