@@ -13,6 +13,7 @@ import pygame
 import threading
 #新聞紙作成スクリプト
 import combinateimage
+import printor
 # from PIL import Image, ImageDraw
 
 model = YOLO("yolov8n.pt").to('cuda')
@@ -179,6 +180,8 @@ async def draw_gaze_on_frame(frame_queue, gazes, error_event: asyncio.Event, tim
                         remove_id.append(randID)
                         combinateimage.overlay_images_on_newspaper(imagepaths[0],imagepaths[1],imagepaths[2])
                         imagepaths.clear()
+                        printor.print_png()
+
 ###################################################
 
 
