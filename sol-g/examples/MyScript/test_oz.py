@@ -383,9 +383,9 @@ def tracking(frame , gazePoint):
     idList = []
 
     for track in prev_tracks:
-        #if not track.is_confirmed():
-         #   continue
-
+        
+        if not track.is_confirmed():
+            continue
         #idList.append(track.track_id)
         x1, y1, x2, y2 = map(int, track.to_ltrb())
         track_center = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
@@ -446,7 +446,12 @@ def tracking(frame , gazePoint):
 
     idList = [track.track_id for track in confirmed_tracks]
     class_name = None
-
+    if idList == []:
+        randID = None
+        distance_score = 100
+        coordinaite = [0,0,0,0]
+        print("debug",randID)
+    print("aaaa",idList)
     if randID in idList:
         for track_2 in confirmed_tracks:
             
@@ -461,9 +466,10 @@ def tracking(frame , gazePoint):
                 if y1 < 0 :
                     y1 = 0
                 if x2 > frame.shape[1] :
-                    x2 = frame.shape[1]
+                    x2 = frame.shape[1] 
                 if y2 > frame.shape[0]:
                     y2 = frame.shape[0]
+                print("ボックスの座標" , x1,":",y1,":",x2,":",y2)
                 
 
                 coordinaite = [x1, y1, x2, y2]
@@ -479,7 +485,6 @@ def tracking(frame , gazePoint):
 
 #####-----#####-----
 
-    distance_score = 0
 
     if randID is not None:
         center_x = (x1 + x2) / 2
